@@ -11,13 +11,31 @@ const { groq, model } = require("../services/aiService");
 const movieTeamController = {
   login: async (req, res) => {
     try {
-      const { secretKey } = req.body;
-      const team = await MovieTeam.findOne({ secretKey });
+      const { email, password, secretKey } = req.body;
+      if (!email || !password || !secretKey) {
+        return res
+          .status(400)
+          .json({ message: "Email, password, and secret key are required" });
+      }
 
-      if (!team) return res.status(400).json({ message: "Invalid secret key" });
+      const team = await MovieTeam.findOne({
+        email: email.trim().toLowerCase(),
+      });
+      if (!team || team.secretKey !== secretKey.trim()) {
+        return res
+          .status(401)
+          .json({ message: "Invalid movie team credentials" });
+      }
+
+      const passwordMatches = await bcrypt.compare(password, team.password);
+      if (!passwordMatches) {
+        return res
+          .status(401)
+          .json({ message: "Invalid movie team credentials" });
+      }
 
       const token = jwt.sign(
-        { id: team._id, role: "movieteam" },
+        { id: team._id, role: "movie_team" },
         process.env.JWT_SECRET,
         { expiresIn: "7d" },
       );
@@ -28,7 +46,7 @@ const movieTeamController = {
         email: team.email,
         assignedMovies: team.assignedMovies,
         freeTicketsCount: team.freeTicketsCount,
-        role: "movieteam",
+        role: "movie_team",
         token,
       });
     } catch (err) {

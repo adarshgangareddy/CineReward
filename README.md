@@ -1,228 +1,257 @@
 # CineReward
 
-CineReward is a movie booking and rewards platform built with a React frontend and an Express/MongoDB backend. Users can browse movies, select seats, pay for tickets, leave reviews, and earn reward coins that can be used later in the booking flow.
+CineReward is a movie discovery, ticket booking, review, and rewards platform. Users discover movies, select seats, pay securely, submit reviews, and earn coins. Movie teams manage review campaigns and rewards, while super admins manage teams, partners, users, and platform operations.
 
-The project also includes admin and role-based workflows for movie teams, super admins, and partner submissions.
+## Product Areas
 
-## Features
+- TMDB-powered movie discovery and search
+- Movie details, seat selection, booking, and Razorpay payments
+- JWT email/username authentication and Google OAuth
+- Role-based access for `user`, `movie_team`, and `super_admin`
+- AI-assisted review scoring and winner selection
+- Reward coins and review-based rewards
+- Firebase push notifications and review reminder cron jobs
+- Partner and event submission, status updates, payments, and email notifications
+- Super Admin team provisioning, credential editing, partner management, and metrics
 
-- Movie discovery using TMDB data
-- Movie ticket booking flow with seat selection
-- Razorpay payment integration
-- JWT-based authentication
-- Google OAuth support
-- Review submission and AI-based review evaluation
-- Reward coin system and redemption flow
-- Email and push notification reminders
-- Movie team dashboard and admin dashboard
-- Partner request management
-- Firebase notification configuration
+## Architecture
+
+```text
+Browser (React + Vite)
+        |
+        | REST/JSON + Bearer JWT
+        v
+Express API (Node.js)
+  |-- auth, role middleware, controllers
+  |-- movie, ticket, review, admin, partner routes
+  |-- TMDB, Razorpay, Firebase, email, AI services
+        |
+        v
+MongoDB Atlas (Mongoose models)
+```
+
+### Request flow
+
+1. The frontend calls the Express API with Axios.
+2. The API validates input and verifies JWTs in `backend/middlewares/auth.js`.
+3. `requireRole()` protects admin and movie-team operations.
+4. Controllers read and mutate MongoDB through Mongoose models.
+5. External services handle movies, payments, AI scoring, email, and push delivery.
 
 ## Tech Stack
 
-- Frontend: React, Vite, Tailwind CSS, React Router
-- Backend: Node.js, Express.js
-- Database: MongoDB + Mongoose
-- Payments: Razorpay
-- AI: Groq / OpenAI-compatible API
-- Notifications: Firebase Cloud Messaging, Resend / SMTP
-- External data: TMDB API
+### Frontend
 
-## Project Structure
-
-```bash
-CineReward/
-├── backend/
-│   ├── config/
-│   ├── controllers/
-│   ├── cron/
-│   ├── middlewares/
-│   ├── models/
-│   ├── routes/
-│   ├── services/
-│   ├── .env.example
-│   ├── package.json
-│   └── server.js
-├── frontend/
-│   ├── public/
-│   ├── src/
-│   ├── .env.example
-│   ├── package.json
-│   ├── vite.config.js
-│   └── index.html
-├── scratch/
-├── README.md
-└── .gitignore
-```
-
-## Prerequisites
-
-Before running the app, make sure you have:
-
-- Node.js 18+
-- npm
-- MongoDB Atlas connection string or local MongoDB instance
-- TMDB API key
-- Razorpay key pair
-- Firebase project config for web push notifications
-- Resend API key or SMTP credentials
-- Optional: Google OAuth credentials
-
-## Environment Setup
-
-Copy the example environment files and fill in the required values:
-
-```bash
-cd backend
-copy .env.example .env
-
-cd ../frontend
-copy .env.example .env
-```
-
-### Backend variables
-
-The backend expects variables such as:
-
-- `PORT`
-- `NODE_ENV`
-- `MONGODB_URI`
-- `JWT_SECRET`
-- `FRONTEND_URL`
-- `TMDB_API_KEY`
-- `AI_API_KEY`
-- `AI_BASE_URL`
-- `AI_MODEL`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RESEND_API_KEY`
-- `FIREBASE_SERVICE_ACCOUNT_BASE64` or `FIREBASE_SERVICE_ACCOUNT`
-- `SUPER_ADMIN_USERNAME`
-- `SUPER_ADMIN_PASSWORD`
-
-See [backend/.env.example](backend/.env.example) for the full list.
-
-### Frontend variables
-
-The frontend expects:
-
-- `VITE_API_URL`
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
-- `VITE_FIREBASE_VAPID_KEY`
-
-See [frontend/.env.example](frontend/.env.example) for the full list.
-
-## Running Locally
-
-Open two terminals.
-
-### 1) Start the backend
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-The backend runs on:
-
-- http://localhost:5000
-
-### 2) Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend runs on:
-
-- http://localhost:5173
-
-If `VITE_API_URL` is not set, Vite may rely on its proxy settings for local API calls. In production, set it to your deployed backend URL.
-
-## Production Notes
-
-For deployment, use separate values for local and production environments.
-
-- Frontend host: Vercel, Netlify, or Render
-- Backend host: Render, Railway, or another Node server
-- Database: MongoDB Atlas
-- Payments: Razorpay live/test keys
-- Push notifications: Firebase Cloud Messaging
-- Email: Resend or SMTP
-
-Recommended production settings:
-
-- `FRONTEND_URL` = deployed frontend URL
-- `VITE_API_URL` = deployed backend URL
-- Firebase frontend/backend values should point to the same Firebase project
-- Never commit `.env` files or Firebase service-account credentials
-
-## Main User Flows
-
-### User
-
-- Sign up, login, or use Google OAuth
-- View movies and show details
-- Select seats and pay for tickets
-- Receive booking and reminder notifications
-- Submit reviews and earn reward coins
-
-### Movie Team
-
-- Log in with team credentials
-- Review AI-scored user feedback
-- Identify high-quality reviews
-- Track performance and winners
-
-### Super Admin
-
-- Manage the platform
-- Review partner requests and admin workflows
-- Monitor account and payment information
-- Control access and governance
-
-## Scripts
+- React 18, Vite, React Router 6
+- Tailwind CSS, Framer Motion, Lucide React
+- Axios
+- Firebase Cloud Messaging web client
+- React Leaflet for partner location selection
 
 ### Backend
 
-```bash
+- Node.js and Express
+- Mongoose and MongoDB Atlas
+- Passport Google OAuth 2.0
+- JWT and bcryptjs
+- Razorpay
+- Firebase Admin SDK
+- Resend/SMTP email delivery
+- Groq/OpenAI-compatible AI service
+- Node cron jobs
+
+## Repository Layout
+
+```text
+backend/
+  config/          Firebase, Razorpay, notifications
+  controllers/     Auth, movies, tickets, reviews, admin, partners
+  cron/            Scheduled review reminders
+  middlewares/     JWT authentication and role authorization
+  models/          Mongoose schemas
+  routes/          Express route modules
+  services/        AI, email, TMDB, notification services
+  server.js        Application bootstrap and database connection
+
+frontend/
+  public/          Firebase messaging service worker
+  src/components/  Navbar, footer, search, loading, notification UI
+  src/pages/       User, team, admin, booking, partner, auth screens
+  src/routes/      Protected route handling
+  src/App.jsx      Router, Axios auth headers, notification listener
+```
+
+## Roles and Access
+
+| Role          | Login                                                  | Main access                                             |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| `user`        | Email or username + password                           | Movies, bookings, reviews, rewards, profile             |
+| `movie_team`  | Team email + password + team secret key                | Assigned movie reviews, AI winners, tickets, rewards    |
+| `super_admin` | Admin email/username + password + 16-digit secret code | Teams, users, partner leads, payments, platform metrics |
+
+All roles use the same frontend login page at `/login`. The API identifies the role and the frontend redirects to the correct workspace. Role checks must remain on the backend; hiding a link in the UI is not authorization.
+
+## Local Setup
+
+Requirements:
+
+- Node.js 18 or newer
+- npm
+- MongoDB Atlas or local MongoDB
+- Provider credentials listed below
+
+Install dependencies:
+
+```powershell
+cd backend
+npm install
+
+cd ../frontend
+npm install
+```
+
+Create environment files:
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+
+cd ../frontend
+Copy-Item .env.example .env
+```
+
+Start the API:
+
+```powershell
+cd backend
 npm start
+```
+
+Start the frontend in a second terminal:
+
+```powershell
+cd frontend
 npm run dev
 ```
 
-### Frontend
+Default URLs:
 
-```bash
-npm run dev
+- Frontend: the Vite URL shown in the terminal, normally `http://localhost:3000`
+- Backend: `http://localhost:5000`
+
+## Environment Variables
+
+Backend values are documented in [backend/.env.example](backend/.env.example). Important groups:
+
+- Database: `MONGODB_URI`
+- Auth: `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`
+- Super admin: `SUPER_ADMIN_USERNAME`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_SECRET_CODE`
+- Movies and AI: `TMDB_API_KEY`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`
+- Payments: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
+- Notifications: Firebase service account values, `RESEND_API_KEY`, or SMTP values
+- Frontend callback: `FRONTEND_URL`
+
+The super-admin secret code must contain exactly 16 digits. Movie-team credentials are created and edited from the Super Admin dashboard; team passwords are stored hashed.
+
+Frontend values are documented in [frontend/.env.example](frontend/.env.example), including `VITE_API_URL` and Firebase web configuration.
+
+## API Surface
+
+### Authentication
+
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/google`
+- `GET /api/auth/google/callback`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+
+### Movie and booking features
+
+- `/api/movies`
+- `/api/search`
+- `/api/tickets`
+- `/api/reviews`
+
+### Super admin and movie team
+
+- `GET /api/admin/stats` - super admin
+- `GET /api/admin/users` - super admin
+- `GET /api/admin/teams` - super admin
+- `POST /api/admin/create-team` - super admin
+- `PATCH /api/admin/teams/:id` - super admin edit team
+- `/api/admin/team/*` - assigned movie team or super admin
+- `/api/admin/partner/*` - public submission plus protected management routes
+
+## Security Policies
+
+- Never commit `.env`, service-account JSON, private keys, API keys, or payment secrets.
+- Rotate any credential pasted into chat, screenshots, GitHub, logs, or a public repository.
+- Use separate credentials for development and production.
+- Use HTTPS for production frontend, API, OAuth callbacks, and Firebase messaging.
+- Restrict MongoDB Atlas Network Access to deployment IPs where possible.
+- Use least-privilege MongoDB users and enable Atlas backups.
+- Keep JWT secrets long, random, and private.
+- Passwords must be hashed with bcrypt; never log passwords or secret keys.
+- Validate authorization on every protected backend route.
+- Do not trust role values supplied by the browser.
+- Use Razorpay signature verification before marking a payment complete.
+- Do not expose Firebase Admin credentials in frontend code.
+- Review notification and email payloads for personal data before sending.
+
+## Deployment Plan
+
+Recommended fast, always-available setup:
+
+1. MongoDB Atlas with backups enabled.
+2. Render paid Web Service or Railway paid service for the backend. Use an always-on plan and `npm start`.
+3. Vercel, Netlify, or Render Static Site for the frontend.
+4. GitHub-connected automatic deployments from a production branch.
+5. Health checks against `GET /` and provider error alerts.
+
+Production settings:
+
+```env
+NODE_ENV=production
+FRONTEND_URL=https://your-frontend-domain.example
+VITE_API_URL=https://your-api-domain.example
+```
+
+Google OAuth production settings:
+
+```text
+Authorized origin: https://your-frontend-domain.example
+Redirect URI: https://your-api-domain.example/api/auth/google/callback
+```
+
+Firebase web push requires HTTPS and the service worker at `/firebase-messaging-sw.js`. Add all environment variables in the hosting provider secret manager, not in the repository.
+
+## Quality Checks
+
+```powershell
+cd frontend
+npm run lint
 npm run build
-npm run preview
+
+cd ../backend
+node --check server.js
 ```
+
+Before release, test user authentication, Google OAuth, password reset, movie-team login, assigned movie restrictions, admin login, team create/edit, booking payments, Firebase notifications, and MongoDB outage responses.
 
 ## Troubleshooting
 
-- If Firebase push notifications fail, verify `VITE_FIREBASE_*` values and the backend service account.
-- If Razorpay fails, confirm the key IDs and secrets are correct.
-- If MongoDB connection fails, check the `MONGODB_URI` and network access rules.
-- If AI review evaluation is not working, verify `AI_API_KEY` and `AI_BASE_URL`.
+- MongoDB errors: check `MONGODB_URI`, Atlas credentials, and Network Access.
+- Google OAuth errors: check callback URL, frontend URL, client ID, and client secret.
+- Admin login errors: verify all four `SUPER_ADMIN_*` values and restart the backend.
+- Team login errors: use the team email, password, and current secret key from the admin dashboard.
+- Missing notifications: verify Firebase web variables, VAPID key, HTTPS, and the service worker.
+- Payment errors: verify Razorpay test/live keys and signature configuration.
 
-## License
+## License and Contributions
 
-This project is currently being developed for local and deployment testing. Add an explicit license before publishing the project publicly.
+This project is under active development. Add an explicit open-source license before public distribution. Keep pull requests focused, do not include secrets, and run frontend lint/build checks before review.
 
-## Contributing
+---
 
-Feel free to fork the repo and create a feature branch for your changes. Keep environment values private and test the app locally before opening a pull request.
-
-<p align="center">
-  Made with ❤️ by <b>Adarsha Vanturu Gangareddy</b>
-</p>
+Made with care for movie communities by Adarsha Vanturu Gangareddy.

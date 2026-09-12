@@ -12,13 +12,14 @@ import UserDashboard from "./pages/UserDashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
-import MovieTeamLogin from "./pages/MovieTeamLogin";
 import MovieTeamDashboard from "./pages/MovieTeamDashboard";
-import SuperAdminLogin from "./pages/SuperAdminLogin";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import QuickReview from "./pages/QuickReview";
 import PartnerWithUs from "./pages/PartnerWithUs";
 import PartnerStatus from "./pages/PartnerStatus";
+import About from "./pages/About";
+import Unauthorized from "./pages/Unauthorized";
+import ProtectedRoute from "./routes/ProtectedRoute";
 import axios from "axios";
 
 // Configure axios base URL globally
@@ -82,10 +83,10 @@ function App() {
     const unsubscribe = onMessageListener((payload) => {
       if (!payload) return;
       console.log("Foreground message:", payload);
-      if (payload.notification) {
+      if (payload.notification || payload.data) {
         setActiveNotification({
-          title: payload.notification.title,
-          body: payload.notification.body,
+          title: payload.notification?.title || payload.data?.title,
+          body: payload.notification?.body || payload.data?.body,
           data: payload.data,
         });
       }
@@ -105,20 +106,31 @@ function App() {
             <Route path="/book/:id" element={<SeatSelection />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
+              <Route path="/dashboard" element={<UserDashboard />} />
+            </Route>
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-            <Route path="/team/login" element={<MovieTeamLogin />} />
-            <Route path="/team/dashboard" element={<MovieTeamDashboard />} />
-            <Route path="/super-admin-login" element={<SuperAdminLogin />} />
             <Route
-              path="/super-admin-dashboard"
-              element={<SuperAdminDashboard />}
-            />
+              element={
+                <ProtectedRoute allowedRoles={["movie_team", "super_admin"]} />
+              }
+            >
+              <Route path="/team/dashboard" element={<MovieTeamDashboard />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={["super_admin"]} />}>
+              <Route
+                path="/super-admin-dashboard"
+                element={<SuperAdminDashboard />}
+              />
+            </Route>
             <Route path="/review/:ticketId" element={<QuickReview />} />
             <Route path="/partner" element={<PartnerWithUs />} />
             <Route path="/partner-status" element={<PartnerStatus />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/list-your-show" element={<PartnerWithUs />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
           </Routes>
         </main>
         <Footer />

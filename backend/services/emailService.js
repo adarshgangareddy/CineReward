@@ -8,7 +8,7 @@ const emailService = {
       process.env.FRONTEND_URL || "http://localhost:3000"
     ).replace(/\/$/, "");
     const body =
-      `Your CineReward ticket is confirmed.\n\n` +
+      `🍿 Your CineReward ticket is confirmed!\n\n` +
       `MOVIE: ${movieTitle}\n` +
       `THEATRE: ${theatre}\n` +
       `DATE: ${date}\n` +
@@ -16,14 +16,14 @@ const emailService = {
       `SEAT(S): ${seat}\n` +
       `TOTAL PAID: INR ${price}\n` +
       `TICKET ID: ${ticketId}\n\n` +
-      `View your booked ticket: ${frontendUrl}/dashboard\n\n` +
-      `Please show this ticket ID at the theatre. Enjoy your movie!`;
-    return sendEmail(userEmail, "CineReward Ticket Confirmation", body);
+      `📥 View or download your ticket from your CineReward dashboard:\n${frontendUrl}/dashboard\n\n` +
+      `Please show this ticket ID at the theatre. Enjoy your movie! 🎬`;
+    return sendEmail(userEmail, "🍿 CineReward Ticket Confirmation", body);
   },
 
   sendReviewReminder: async (userEmail, movieTitle, quickReviewUrl) => {
-    const body = `We hope you enjoyed ${movieTitle}!\n\nYour opinion matters to us. Review the movie now and earn a chance to win 100 reward coins!\n\nSubmit Your Review Directly Here: ${quickReviewUrl}\n\nThank you for choosing CineReward.`;
-    return sendEmail(userEmail, `Rate your experience: ${movieTitle} 🎥`, body);
+    const body = `🎥 We hope you enjoyed ${movieTitle}!\n\nYour opinion matters to us. Review the movie now and earn a chance to win 100 reward coins! 🪙\n\n⭐ Submit your review here:\n${quickReviewUrl}\n\nThank you for choosing CineReward.`;
+    return sendEmail(userEmail, `⭐ Rate your experience: ${movieTitle}`, body);
   },
 
   sendWinnerNotification: async (userEmail, movieTitle, coins) => {

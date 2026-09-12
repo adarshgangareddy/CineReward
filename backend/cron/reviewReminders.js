@@ -27,16 +27,15 @@ cron.schedule("*/5 * * * *", async () => {
       if (user && user.fcmTokens && user.fcmTokens.length > 0) {
         const title = "Rate Your Movie Experience! 🎥";
         const mTitle = ticket.movieTitle || "your recent movie";
-        const message = `How was ${mTitle}? Click to rate it with stars and earn reward coins!`;
+        const message = `How was ${mTitle}? ⭐ Share your review and earn reward coins!`;
 
         const frontendUrl = (
           process.env.FRONTEND_URL || "http://localhost:3000"
         ).replace(/\/$/, "");
         const quickReviewUrl = `${frontendUrl}/review/${ticket._id}`;
-        const fullMessage = `${message}\nRate here: ${quickReviewUrl}`;
 
         notificationSent =
-          (await sendPushNotification(user.fcmTokens, title, fullMessage, {
+          (await sendPushNotification(user.fcmTokens, title, message, {
             ticketId: ticket._id,
             type: "review_reminder",
           })) || notificationSent;
