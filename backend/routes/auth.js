@@ -30,6 +30,39 @@ const requireDatabase = (req, res, next) => {
   next();
 };
 
+router.get("/db-test", async (req, res) => {
+  try {
+    const state = mongoose.connection.readyState;
+
+    console.log("[DB TEST] readyState:", state);
+
+    if (state !== 1) {
+      return res.status(503).json({
+        connected: false,
+        readyState: state,
+        message: "MongoDB is not connected",
+      });
+    }
+
+    // Actually perform a MongoDB operation
+    await mongoose.connection.db.admin().ping();
+
+    return res.json({
+      connected: true,
+      readyState: state,
+      host: mongoose.connection.host,
+      database: mongoose.connection.name,
+      message: "MongoDB connection is working",
+    });
+  } catch (error) {
+    console.error("[DB TEST] Error:", error.message);
+
+    return res.status(500).json({
+      connected: false,
+      message: error.message,
+    });
+  }
+});
 // ======================================================
 // Email / Password Authentication
 // ======================================================
