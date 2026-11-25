@@ -56,16 +56,16 @@ const Footer = () => {
 
             <div className="space-y-2.5">
               <p className="text-white font-bold uppercase tracking-wider text-[10px]">
-                Portals
+                Portals &amp; Legal
               </p>
               <Link to="/login" className="block text-slate-400 hover:text-white transition-colors">
-                Sign In
+                Unified Sign In
               </Link>
-              <Link to="/team/login" className="block text-slate-400 hover:text-white transition-colors">
-                Movie Team Portal
+              <Link to="/privacy-policy" className="block text-slate-400 hover:text-white transition-colors">
+                Privacy Policy
               </Link>
-              <Link to="/super-admin-login" className="block text-slate-400 hover:text-white transition-colors">
-                Admin Portal
+              <Link to="/terms" className="block text-slate-400 hover:text-white transition-colors">
+                Terms of Service
               </Link>
               <a
                 href="mailto:adarshavg08@gmail.com"
@@ -79,8 +79,11 @@ const Footer = () => {
 
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
           <div className="flex flex-wrap items-center gap-6">
-            <Link to="/about" className="hover:text-slate-300 transition-colors">
+            <Link to="/privacy-policy" className="hover:text-slate-300 transition-colors">
               Privacy Policy
+            </Link>
+            <Link to="/terms" className="hover:text-slate-300 transition-colors">
+              Terms of Service
             </Link>
             <Link to="/list-your-show" className="hover:text-slate-300 transition-colors">
               Partner Terms

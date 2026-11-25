@@ -2,8 +2,12 @@ const User = require("../models/User");
 const MovieTeam = require("../models/MovieTeam");
 const Ticket = require("../models/Ticket");
 const Review = require("../models/Review");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const {
+  hashSecret,
+  digestSecret,
+  formatKeyHint,
+} = require("../utils/passwordHash");
 
 const adminController = {
   superLogin: async (req, res) => {
@@ -18,9 +22,6 @@ const adminController = {
       const adminSecret = process.env.SUPER_ADMIN_SECRET_CODE?.trim();
 
       if (!adminUsername || !adminPassword) {
-        console.error(
-          "[Super Admin Login] SUPER_ADMIN_USERNAME/SUPER_ADMIN_PASSWORD are not configured.",
-        );
         return res.status(500).json({
           message: "Super admin login is not configured on the server",
         });
@@ -31,19 +32,17 @@ const adminController = {
         (adminEmail && cleanUsername === adminEmail);
 
       if (matchesIdentity && cleanPassword === adminPassword) {
-        if (adminSecret && /^\d{16}$/.test(adminSecret)) {
-          if (!secretKey || secretKey.trim() !== adminSecret) {
-            return res.status(401).json({
-              message: "Admin login requires the correct 16-digit secret code",
-            });
-          }
+        if (secretKey && adminSecret && secretKey.trim() !== adminSecret) {
+          return res.status(401).json({
+            message: "Admin secret code is incorrect",
+          });
         }
         const token = jwt.sign(
           { role: "super_admin", username: adminUsername },
           process.env.JWT_SECRET,
-          { expiresIn: "7d" },
+          { expiresIn: "7d" }
         );
-        res.json({
+        return res.json({
           message: "Super Admin Login Successful",
           id: "super_admin",
           name: "Super Admin",
@@ -52,11 +51,10 @@ const adminController = {
           email: adminEmail || adminUsername,
           token,
         });
-      } else {
-        res.status(401).json({ message: "Invalid credentials" });
       }
+      return res.status(401).json({ message: "Invalid credentials" });
     } catch (err) {
-      res.status(500).json({ message: "Login error", error: err.message });
+      return res.status(500).json({ message: "Login error", error: err.message });
     }
   },
 
@@ -92,7 +90,7 @@ const adminController = {
 
   getUsers: async (req, res) => {
     try {
-      const users = await User.find().select("-password");
+      const users = await User.find().select("-password -resetCodeHash");
       res.json(users);
     } catch (err) {
       res
@@ -105,40 +103,55 @@ const adminController = {
     try {
       const { name, email, password, secretKey, assignedMovies } = req.body;
       const normalizedEmail = email?.trim().toLowerCase();
-      if (
-        !name?.trim() ||
-        !normalizedEmail ||
-        !password ||
-        !secretKey?.trim()
-      ) {
+      const cleanKey = secretKey?.trim();
+      const cleanPass = password?.trim();
+
+      if (!name?.trim() || !normalizedEmail || (!cleanKey && !cleanPass)) {
         return res.status(400).json({
-          message: "Name, email, password, and secret key are required",
+          message: "Name, email, and a Secret Key (or password) are required",
         });
       }
 
-      let team = await MovieTeam.findOne({
-        $or: [{ email: normalizedEmail }, { secretKey: secretKey.trim() }],
+      const keyDigest = cleanKey ? digestSecret(cleanKey) : undefined;
+
+      const existing = await MovieTeam.findOne({
+        $or: [
+          { email: normalizedEmail },
+          ...(keyDigest ? [{ secretKeyDigest: keyDigest }] : []),
+        ],
       });
-      if (team)
+      if (existing) {
         return res
           .status(409)
           .json({ message: "Team email or secret key already exists" });
+      }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      team = new MovieTeam({
+      const team = new MovieTeam({
         name: name.trim(),
         email: normalizedEmail,
-        password: hashedPassword,
-        secretKey: secretKey.trim(),
-        assignedMovies,
+        ...(cleanPass ? { password: await hashSecret(cleanPass) } : {}),
+        ...(cleanKey
+          ? {
+              secretKeyDigest: keyDigest,
+              secretKeyHash: await hashSecret(cleanKey),
+              secretKeyHint: formatKeyHint(cleanKey),
+            }
+          : {}),
+        assignedMovies: Array.isArray(assignedMovies) ? assignedMovies : [],
       });
 
       await team.save();
-      res
-        .status(201)
-        .json({ message: "Movie Team created successfully", team });
+      res.status(201).json({
+        message: "Movie Team created successfully (credentials hashed with Argon2d)",
+        team: team.toObject({
+          transform: (_, value) => {
+            delete value.password;
+            delete value.secretKeyHash;
+            delete value.secretKeyDigest;
+            return value;
+          },
+        }),
+      });
     } catch (err) {
       res
         .status(500)
@@ -150,31 +163,43 @@ const adminController = {
     try {
       const { name, email, password, secretKey, assignedMovies } = req.body;
       const team = await MovieTeam.findById(req.params.id);
-      if (!team)
+      if (!team) {
         return res.status(404).json({ message: "Movie team not found" });
-
-      const normalizedEmail = email?.trim().toLowerCase();
-      if (!name?.trim() || !normalizedEmail || !secretKey?.trim()) {
-        return res
-          .status(400)
-          .json({ message: "Name, email, and secret key are required" });
       }
 
+      const normalizedEmail = email?.trim().toLowerCase();
+      const cleanKey = secretKey?.trim();
+      if (!name?.trim() || !normalizedEmail) {
+        return res.status(400).json({ message: "Name and email are required" });
+      }
+
+      const keyDigest = cleanKey ? digestSecret(cleanKey) : undefined;
       const duplicate = await MovieTeam.findOne({
         _id: { $ne: team._id },
-        $or: [{ email: normalizedEmail }, { secretKey: secretKey.trim() }],
+        $or: [
+          { email: normalizedEmail },
+          ...(keyDigest ? [{ secretKeyDigest: keyDigest }] : []),
+        ],
       });
-      if (duplicate)
+      if (duplicate) {
         return res
           .status(409)
           .json({ message: "Team email or secret key already exists" });
+      }
 
       team.name = name.trim();
       team.email = normalizedEmail;
-      team.secretKey = secretKey.trim();
       team.assignedMovies = Array.isArray(assignedMovies) ? assignedMovies : [];
-      if (password?.trim())
-        team.password = await bcrypt.hash(password.trim(), 10);
+
+      if (cleanKey) {
+        team.secretKeyDigest = keyDigest;
+        team.secretKeyHash = await hashSecret(cleanKey);
+        team.secretKeyHint = formatKeyHint(cleanKey);
+        team.secretKey = undefined;
+      }
+      if (password?.trim()) {
+        team.password = await hashSecret(password.trim());
+      }
 
       await team.save();
       res.json({
@@ -182,6 +207,8 @@ const adminController = {
         team: team.toObject({
           transform: (_, value) => {
             delete value.password;
+            delete value.secretKeyHash;
+            delete value.secretKeyDigest;
             return value;
           },
         }),
@@ -195,7 +222,9 @@ const adminController = {
 
   getAllTeams: async (req, res) => {
     try {
-      const teams = await MovieTeam.find().select("-password");
+      const teams = await MovieTeam.find().select(
+        "-password -secretKeyHash -secretKeyDigest -secretKey -resetCodeHash"
+      );
       res.json(teams);
     } catch (err) {
       res

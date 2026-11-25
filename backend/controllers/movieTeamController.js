@@ -1,5 +1,4 @@
 const MovieTeam = require("../models/MovieTeam");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Ticket = require("../models/Ticket");
 const Review = require("../models/Review");
@@ -7,28 +6,40 @@ const User = require("../models/User");
 const emailService = require("../services/emailService");
 const { sendPushNotification } = require("../config/notifications");
 const { groq, model } = require("../services/aiService");
+const {
+  hashSecret,
+  verifySecret,
+  digestSecret,
+  formatKeyHint,
+} = require("../utils/passwordHash");
 
 const movieTeamController = {
   login: async (req, res) => {
     try {
       const { email, password, secretKey } = req.body;
-      if (!email || !password || !secretKey) {
+      const cred = secretKey || password;
+      if (!email || !cred) {
         return res
           .status(400)
-          .json({ message: "Email, password, and secret key are required" });
+          .json({ message: "Email and Secret Key (or password) are required" });
       }
 
       const team = await MovieTeam.findOne({
         email: email.trim().toLowerCase(),
       });
-      if (!team || team.secretKey !== secretKey.trim()) {
+      if (!team) {
         return res
           .status(401)
           .json({ message: "Invalid movie team credentials" });
       }
 
-      const passwordMatches = await bcrypt.compare(password, team.password);
-      if (!passwordMatches) {
+      const keyOk =
+        (team.secretKeyHash && (await verifySecret(team.secretKeyHash, cred))) ||
+        (team.secretKey && String(cred).trim() === String(team.secretKey).trim());
+      const passOk =
+        team.password && (await verifySecret(team.password, password || cred));
+
+      if (!keyOk && !passOk) {
         return res
           .status(401)
           .json({ message: "Invalid movie team credentials" });
@@ -37,7 +48,7 @@ const movieTeamController = {
       const token = jwt.sign(
         { id: team._id, role: "movie_team" },
         process.env.JWT_SECRET,
-        { expiresIn: "7d" },
+        { expiresIn: "7d" }
       );
 
       res.json({
@@ -46,11 +57,94 @@ const movieTeamController = {
         email: team.email,
         assignedMovies: team.assignedMovies,
         freeTicketsCount: team.freeTicketsCount,
+        secretKeyHint:
+          team.secretKeyHint ||
+          (team.secretKey ? formatKeyHint(team.secretKey) : "Configured"),
         role: "movie_team",
         token,
       });
     } catch (err) {
       res.status(500).json({ message: "Login failed", error: err.message });
+    }
+  },
+
+  updateSecurity: async (req, res) => {
+    try {
+      const { teamId, currentCredential, newSecretKey, newPassword } = req.body;
+      const targetId = teamId || req.auth?.id;
+      const team = await MovieTeam.findById(targetId);
+      if (!team) {
+        return res.status(404).json({ message: "Movie team not found" });
+      }
+
+      if (req.auth?.role !== "super_admin") {
+        if (!currentCredential) {
+          return res.status(400).json({
+            message: "Current secret key or password is required to make changes",
+          });
+        }
+        const ok =
+          (team.secretKeyHash &&
+            (await verifySecret(team.secretKeyHash, currentCredential))) ||
+          (team.secretKey &&
+            String(currentCredential).trim() === String(team.secretKey).trim()) ||
+          (team.password &&
+            (await verifySecret(team.password, currentCredential)));
+        if (!ok) {
+          return res
+            .status(401)
+            .json({ message: "Current secret key or password is incorrect" });
+        }
+      }
+
+      const cleanKey = newSecretKey?.trim();
+      const cleanPass = newPassword?.trim();
+      if (!cleanKey && !cleanPass) {
+        return res.status(400).json({
+          message: "Provide a new Secret Key or new Password",
+        });
+      }
+
+      if (cleanKey) {
+        if (cleanKey.length < 6) {
+          return res
+            .status(400)
+            .json({ message: "Secret key must be at least 6 characters" });
+        }
+        const nextDigest = digestSecret(cleanKey);
+        const dup = await MovieTeam.findOne({
+          _id: { $ne: team._id },
+          secretKeyDigest: nextDigest,
+        });
+        if (dup) {
+          return res
+            .status(409)
+            .json({ message: "This secret key is already in use" });
+        }
+        team.secretKeyDigest = nextDigest;
+        team.secretKeyHash = await hashSecret(cleanKey);
+        team.secretKeyHint = formatKeyHint(cleanKey);
+        team.secretKey = undefined;
+      }
+
+      if (cleanPass) {
+        if (cleanPass.length < 6) {
+          return res
+            .status(400)
+            .json({ message: "Password must be at least 6 characters" });
+        }
+        team.password = await hashSecret(cleanPass);
+      }
+
+      await team.save();
+      res.json({
+        message: "Team credentials updated with Argon2d encryption",
+        secretKeyHint: team.secretKeyHint || "Configured",
+      });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ message: "Failed to update security credentials", error: err.message });
     }
   },
 

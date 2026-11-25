@@ -51,7 +51,11 @@ const ResetPassword = () => {
           Reset Password
         </h1>
         <p className="text-slate-400 text-xs mb-7">
-          Create a strong new password for your CineReward account.
+          Create a strong new password for your CineReward account, or{" "}
+          <Link to="/forgot-password" className="text-[#ff2e3b] hover:underline">
+            verify with your 8-digit email code
+          </Link>
+          .
         </p>
 
         {success ? (

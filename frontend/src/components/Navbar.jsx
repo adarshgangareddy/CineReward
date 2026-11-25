@@ -86,8 +86,8 @@ const REWARDS_ITEMS = [
   { label: "List Your Show", to: "/list-your-show" },
   { label: "Track Inquiry", to: "/partner-status" },
   { label: "About CineReward", to: "/about" },
-  { label: "Movie Team Portal", to: "/team/login" },
-  { label: "Admin Portal", to: "/super-admin-login" },
+  { label: "Unified Sign In (All Roles)", to: "/login" },
+  { label: "Privacy Policy", to: "/privacy-policy" },
 ];
 
 const DROPDOWN_MENUS = [
@@ -610,14 +610,14 @@ const Navbar = () => {
         </div>
       )}
 
-      {/* Mobile Floating Bottom Glass Navigation Dock (Matching 4b102f2a.jpg / d6323759.jpg) */}
+      {/* Mobile Floating Wide Glass Navigation Dock */}
       <nav
         aria-label="Mobile quick navigation"
-        className="lg:hidden fixed bottom-3.5 inset-x-4 z-40 bg-[#0d111a]/80 backdrop-blur-2xl border border-white/[0.16] rounded-full px-2 py-1.5 flex items-center justify-around shadow-[0_18px_50px_rgba(0,0,0,0.85)]"
+        className="lg:hidden fixed bottom-2.5 inset-x-2 sm:inset-x-4 z-40 bg-[#0d111a]/85 backdrop-blur-2xl border border-white/[0.16] rounded-2xl px-1.5 py-1.5 flex items-center justify-between shadow-[0_18px_50px_rgba(0,0,0,0.85)] print:hidden"
       >
         <Link
           to="/"
-          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+          className={`flex-1 flex flex-col items-center justify-center px-2 py-1.5 rounded-xl text-[10px] font-medium transition-all ${
             location.pathname === "/"
               ? "bg-white/[0.14] text-white"
               : "text-slate-400 hover:text-white"
@@ -629,7 +629,7 @@ const Navbar = () => {
 
         <Link
           to="/catalog?section=featured"
-          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+          className={`flex-1 flex flex-col items-center justify-center px-2 py-1.5 rounded-xl text-[10px] font-medium transition-all ${
             isMoviesTab
               ? "bg-white/[0.14] text-white"
               : "text-slate-400 hover:text-white"
@@ -641,7 +641,7 @@ const Navbar = () => {
 
         <Link
           to="/catalog?section=shows"
-          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+          className={`flex-1 flex flex-col items-center justify-center px-2 py-1.5 rounded-xl text-[10px] font-medium transition-all ${
             isSeriesTab
               ? "bg-white/[0.14] text-white"
               : "text-slate-400 hover:text-white"
@@ -653,7 +653,7 @@ const Navbar = () => {
 
         <Link
           to="/watchlist"
-          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+          className={`flex-1 flex flex-col items-center justify-center px-2 py-1.5 rounded-xl text-[10px] font-medium transition-all ${
             location.pathname === "/watchlist"
               ? "bg-white/[0.14] text-white"
               : "text-slate-400 hover:text-white"
@@ -667,7 +667,7 @@ const Navbar = () => {
           type="button"
           onClick={() => setIsSearchOpen(true)}
           aria-label="Open Search"
-          className="flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium text-slate-400 hover:text-white transition-all"
+          className="flex-1 flex flex-col items-center justify-center px-2 py-1.5 rounded-xl text-[10px] font-medium text-slate-400 hover:text-white transition-all"
         >
           <Search className="w-4 h-4 mb-0.5" />
           <span>Search</span>

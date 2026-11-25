@@ -11,9 +11,11 @@ import {
   ShieldCheck,
   Ticket,
   Sparkles,
+  KeyRound,
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { getActiveSession } from "../utils/auth";
+import { getActiveSession, saveRoleSession } from "../utils/auth";
 
 const MovieTeamDashboard = () => {
   const [session] = useState(() => getActiveSession());
@@ -31,6 +33,14 @@ const MovieTeamDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [isAwarding, setIsAwarding] = useState(null);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [secForm, setSecForm] = useState({
+    currentCredential: "",
+    newSecretKey: "",
+    newPassword: "",
+  });
+  const [secSaving, setSecSaving] = useState(false);
+  const [secMsg, setSecMsg] = useState({ type: "", text: "" });
   const winnersRef = React.useRef(null);
   const navigate = useNavigate();
 
@@ -131,6 +141,42 @@ const MovieTeamDashboard = () => {
     }
   };
 
+  const handleUpdateSecurity = async (e) => {
+    e.preventDefault();
+    if (!activeTeamId) return;
+    setSecSaving(true);
+    setSecMsg({ type: "", text: "" });
+    try {
+      const res = await axios.put("/api/admin/team/security", {
+        teamId: activeTeamId,
+        currentCredential:
+          session?.role === "super_admin" ? undefined : secForm.currentCredential,
+        newSecretKey: secForm.newSecretKey.trim() || undefined,
+        newPassword: secForm.newPassword.trim() || undefined,
+      });
+      const updatedTeam = {
+        ...activeTeam,
+        secretKeyHint: res.data?.secretKeyHint || activeTeam.secretKeyHint,
+      };
+      setActiveTeam(updatedTeam);
+      if (session?.role === "movie_team") {
+        saveRoleSession("movie_team", updatedTeam, session.token);
+      }
+      setSecForm({ currentCredential: "", newSecretKey: "", newPassword: "" });
+      setSecMsg({
+        type: "success",
+        text: res.data?.message || "Credentials updated with Argon2d!",
+      });
+    } catch (err) {
+      setSecMsg({
+        type: "error",
+        text: err.response?.data?.message || "Failed to update security key.",
+      });
+    } finally {
+      setSecSaving(false);
+    }
+  };
+
   if (!activeTeam && session?.role !== "super_admin") {
     return (
       <div className="text-center py-20 text-white">Unauthorized Access.</div>
@@ -138,34 +184,52 @@ const MovieTeamDashboard = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 mb-8 relative overflow-hidden">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-28 lg:py-10 min-w-0">
+      <div className="glass-panel rounded-3xl p-5 sm:p-8 mb-8 relative overflow-hidden">
         <div className="flex flex-col md:flex-row justify-between items-start gap-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-start gap-4 min-w-0">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="w-10 h-10 rounded-xl glass-button flex items-center justify-center"
+              className="w-10 h-10 shrink-0 rounded-xl glass-button flex items-center justify-center"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div>
-              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                 Movie Team Hub
               </h1>
-              <p className="text-slate-400 text-xs mt-1">
+              <p className="text-slate-400 text-xs mt-1 break-words">
                 Manage AI-scored reviews &amp; coin rewards for{" "}
                 <span className="text-white font-semibold">
                   {activeTeam?.name || "Team"}
                 </span>
               </p>
-              <div className="flex items-center gap-1.5 mt-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-                <ShieldCheck className="w-3.5 h-3.5" /> Workspace Authenticated
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Argon2d Authenticated
+                </span>
+                {activeTeam?.secretKeyHint && (
+                  <span className="text-slate-300 bg-white/[0.06] border border-white/[0.1] px-2.5 py-0.5 rounded-full">
+                    Secret Key: {activeTeam.secretKeyHint}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap gap-2.5 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setSecMsg({ type: "", text: "" });
+                setSecurityOpen(true);
+              }}
+              className="glass-button px-4 py-3 rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+              Change Secret Key
+            </button>
             {teamsList.length > 0 && (
               <select
                 value={activeTeamId || ""}
@@ -248,8 +312,8 @@ const MovieTeamDashboard = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
+        <div className="lg:col-span-1 space-y-5 min-w-0">
           <div className="glass-card rounded-3xl p-7 text-center">
             <div className="w-12 h-12 bg-[#e50914]/15 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <TrendingUp className="w-6 h-6 text-[#ff2e3b]" />
@@ -279,7 +343,7 @@ const MovieTeamDashboard = () => {
           </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-8">
+        <div className="lg:col-span-2 space-y-8 min-w-0">
           <div className="glass-card rounded-3xl overflow-hidden">
             <div className="p-6 border-b border-white/[0.08] flex flex-wrap justify-between items-center gap-4">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -402,6 +466,111 @@ const MovieTeamDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Team Secret Key / Password Rotation Modal */}
+      {securityOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-7 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-400" />
+                <h2 className="text-lg font-bold text-white">
+                  Update Team Security
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSecurityOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Change your Movie Team Secret Key or Password. Updated keys are encrypted immediately using Argon2d.
+            </p>
+
+            {secMsg.text && (
+              <div
+                className={`px-3.5 py-2.5 rounded-xl text-xs font-medium border ${
+                  secMsg.type === "success"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                    : "bg-red-500/15 border-red-500/40 text-red-200"
+                }`}
+              >
+                {secMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateSecurity} className="space-y-3.5">
+              {session?.role !== "super_admin" && (
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                    Current Secret Key or Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={secForm.currentCredential}
+                    onChange={(e) =>
+                      setSecForm({ ...secForm, currentCredential: e.target.value })
+                    }
+                    className="w-full bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e50914]"
+                    placeholder="Verify current key/password"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                  New Secret Key (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={secForm.newSecretKey}
+                  onChange={(e) =>
+                    setSecForm({ ...secForm, newSecretKey: e.target.value })
+                  }
+                  className="w-full bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e50914]"
+                  placeholder="e.g. CR-NEWKEY99"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                  New Team Password (Optional)
+                </label>
+                <input
+                  type="password"
+                  value={secForm.newPassword}
+                  onChange={(e) =>
+                    setSecForm({ ...secForm, newPassword: e.target.value })
+                  }
+                  className="w-full bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e50914]"
+                  placeholder="Leave blank to keep existing"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSecurityOpen(false)}
+                  className="flex-1 glass-button py-2.5 rounded-xl text-xs font-semibold"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={secSaving}
+                  className="flex-1 btn-crimson py-2.5 rounded-xl text-xs font-bold disabled:opacity-50"
+                >
+                  {secSaving ? "Saving..." : "Save Credentials"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

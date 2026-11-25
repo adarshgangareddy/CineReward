@@ -23,20 +23,21 @@ const ticketController = {
       const userDoc = await User.findById(userId);
       if (!userDoc) return res.status(404).json({ message: "User not found" });
 
-      let coinCost = 0;
-      if (useCoins) {
-        const seatCount = seat.split(",").length;
-        coinCost = seatCount * 100;
-        if (userDoc.coins < coinCost) {
-          return res
-            .status(400)
-            .json({ message: "Insufficient coins for this booking" });
-        }
+      const seatCount = String(seat || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean).length;
+      if (seatCount === 0) {
+        return res.status(400).json({ message: "At least one seat is required" });
       }
 
-      // Calculate an approximate showtimeEnd (say, 3 hours after start time)
-      // For a robust system, this should ideally come from TMDB runtime,
-      // but a 3hr default is safe for scheduling review prompts.
+      const coinDiscount = Number(useCoins) > 0 ? Number(useCoins) : 0;
+      if (coinDiscount > 0 && userDoc.coins < coinDiscount) {
+        return res
+          .status(400)
+          .json({ message: "Insufficient coins for this discount" });
+      }
+
       const timeMatch = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
       let startHour = 0;
       let startMinute = 0;
@@ -48,8 +49,8 @@ const ticketController = {
         if (ampm === "AM" && startHour === 12) startHour = 0;
       } else {
         const startTimeParts = time.split(":");
-        startHour = parseInt(startTimeParts[0]) || 0;
-        startMinute = parseInt(startTimeParts[1]) || 0;
+        startHour = parseInt(startTimeParts[0], 10) || 0;
+        startMinute = parseInt(startTimeParts[1], 10) || 0;
       }
 
       const showtimeEnd = new Date(date);
@@ -69,47 +70,38 @@ const ticketController = {
 
       await ticket.save();
 
-      const updateData = { $push: { bookedTickets: ticket._id } };
-      if (useCoins) {
-        updateData.$inc = { coins: -coinCost };
-      }
+      const coinsEarned = Math.max(25, seatCount * 25);
+      const netCoinDelta = coinsEarned - coinDiscount;
 
-      const user = await User.findByIdAndUpdate(userId, updateData, {
-        new: true,
-      });
+      const user = await User.findByIdAndUpdate(
+        userId,
+        {
+          $push: { bookedTickets: ticket._id },
+          $inc: { coins: netCoinDelta },
+        },
+        { new: true }
+      );
 
       let pushSent = false;
       if (user.fcmTokens && user.fcmTokens.length > 0) {
         try {
-          const title = "CineReward Ticket Confirmed! 🍿";
-          const message = `${movieTitle} booked for ${date} at ${time}. Seat(s): ${seat}. Ticket: ${ticket._id}`;
-          pushSent = await sendPushNotification(
-            user.fcmTokens,
-            title,
-            message,
-            {
-              type: "ticket-booked",
-              ticketId: ticket._id,
-              movieTitle,
-              theatre,
-              seat,
-              date,
-              time,
-            },
-          );
-          console.log(
-            `[Push] Ticket notification ${pushSent ? "sent" : "failed"} for user ${userId}`,
-          );
+          const title = "CineReward Ticket Confirmed!";
+          const message = `${movieTitle} • ${theatre} • ${date} at ${time} • Seats: ${seat}`;
+          pushSent = await sendPushNotification(user.fcmTokens, title, message, {
+            type: "ticket-booked",
+            ticketId: ticket._id,
+            movieTitle,
+            theatre,
+            seat,
+            date,
+            time,
+            url: "/dashboard",
+          });
         } catch (pushErr) {
           console.error("[Push] Failed to trigger notification:", pushErr);
         }
-      } else {
-        console.warn(
-          `[Push] No FCM tokens found for user ${userId}. Booking confirmed but no push notification sent.`,
-        );
       }
 
-      // 2. Send Email Notification
       let emailSent = false;
       if (user.email) {
         emailSent = await emailService.sendTicketConfirmation(user.email, {
@@ -120,18 +112,14 @@ const ticketController = {
           time,
           price,
           ticketId: ticket._id,
+          coinsEarned,
         });
-        console.log(
-          `[Email] Ticket receipt ${emailSent ? "sent" : "failed"} to ${user.email}`,
-        );
-      } else {
-        console.log(
-          `[Email] No email found for user ${userId}, skipping email notification.`,
-        );
       }
 
       res.status(201).json({
         ...ticket.toObject(),
+        ticket,
+        coinsEarned,
         emailSent,
         pushSent,
       });

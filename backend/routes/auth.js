@@ -94,8 +94,10 @@ router.get("/db-test", async (req, res) => {
 
 router.post("/signup", requireDatabase, authController.signup);
 router.post("/login", authController.login);
+router.post("/firebase", requireDatabase, authController.firebaseSocialLogin);
 router.get("/me", authenticate, authController.me);
 router.post("/forgot-password", requireDatabase, authController.forgotPassword);
+router.post("/verify-reset-code", requireDatabase, authController.verifyResetCode);
 router.post("/reset-password", requireDatabase, authController.resetPassword);
 
 // ======================================================

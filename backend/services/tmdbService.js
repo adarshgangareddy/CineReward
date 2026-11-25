@@ -389,35 +389,140 @@ async function tmdbGet(path, params = {}, ttl = SHORT_TTL) {
   return response.data;
 }
 
-const CITY_AREA_MAP = {
-  Hyderabad: ["Gachibowli", "Jubilee Hills", "Banjara Hills", "Hitec City", "Kukatpally", "Madhapur", "Necklace Road", "Ameerpet", "Kondapur", "Secunderabad"],
-  Bengaluru: ["Indiranagar", "Koramangala", "Whitefield", "Rajajinagar", "MG Road", "Jayanagar", "Yelahanka", "Bellandur", "Hebbal", "Malleshwaram"],
-  Mumbai: ["Lower Parel", "Bandra West", "Andheri West", "Juhu", "Worli", "Powai", "Malad", "Goregaon", "Thane", "Colaba"],
-  "Delhi-NCR": ["Saket", "Connaught Place", "Vasant Kunj", "Gurugram CyberHub", "Noida Sec 18", "Dwarka", "Chanakyapuri", "Rohini", "Nehru Place", "Rajouri Garden"],
-  Chennai: ["Royapettah", "Velachery", "Anna Nagar", "Adyar", "T. Nagar", "Nungambakkam", "OMR Navalur", "Vadapalani", "Guindy", "Porur"],
+const CITY_THEATRES_MAP = {
+  Hyderabad: [
+    { name: "AMB Cinemas: Gachibowli", area: "Gachibowli", badge: "Dolby Atmos • 4K Laser", formats: ["2D", "3D", "Dolby Atmos"], price: 320, amenities: ["M-Ticket", "Dolby Atmos", "Gourmet F&B"] },
+    { name: "Prasads Multiplex: Necklace Road", area: "Necklace Road", badge: "PCX Giant Screen • Atmos", formats: ["2D", "3D", "IMAX 2D"], price: 295, amenities: ["M-Ticket", "PCX Screen", "Food Court"] },
+    { name: "PVR ICON: Hitech City", area: "Madhapur", badge: "4K Laser • Dolby 7.1", formats: ["2D", "3D", "IMAX 2D"], price: 350, amenities: ["M-Ticket", "Recliners", "Valet"] },
+    { name: "AAA Cinemas: Ameerpet", area: "Ameerpet", badge: "Barco 4K • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 295, amenities: ["M-Ticket", "Dolby Atmos", "Lounge"] },
+    { name: "INOX: GVK One Banjara Hills", area: "Banjara Hills", badge: "Insignia Luxe • 4K", formats: ["2D", "3D"], price: 340, amenities: ["M-Ticket", "Luxury Seating", "Cafe"] },
+    { name: "PVR: Nexus Mall Kukatpally", area: "Kukatpally", badge: "4DX • Dolby 7.1", formats: ["2D", "3D", "4DX"], price: 310, amenities: ["M-Ticket", "4DX Motion", "Food Court"] },
+    { name: "Sudarshan 35mm: RTC X Roads", area: "RTC X Roads", badge: "4K Christie • Dolby Atmos", formats: ["2D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "Mass Ambience", "Atmos"] },
+    { name: "Asian M Cube: Attapur", area: "Attapur", badge: "RGB 4K Laser • Dolby", formats: ["2D", "3D"], price: 230, amenities: ["M-Ticket", "Food & Beverage"] },
+    { name: "Cinepolis: Mantra Mall", area: "Attapur", badge: "VIP Recliners • 4K", formats: ["2D", "3D"], price: 280, amenities: ["M-Ticket", "Recliners", "Popcorn Bar"] },
+    { name: "PVR Irrum Manzil: Next Galleria", area: "Punjagutta", badge: "Dolby Digital 7.1", formats: ["2D", "3D", "IMAX 2D"], price: 295, amenities: ["M-Ticket", "Metro Connected"] },
+  ],
+  Bengaluru: [
+    { name: "PVR ICON: Orion Mall", area: "Rajajinagar", badge: "IMAX 4K • Gold Class", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 420, amenities: ["M-Ticket", "IMAX Laser", "Recliners"] },
+    { name: "Urvashi Digital Cinema: Lalbagh", area: "Lalbagh Road", badge: "Dolby Atmos • 4K Laser", formats: ["2D", "3D", "Dolby Atmos"], price: 280, amenities: ["M-Ticket", "Dolby Atmos", "Curved Screen"] },
+    { name: "PVR: Phoenix Marketcity", area: "Whitefield", badge: "4DX • IMAX Laser", formats: ["2D", "3D", "IMAX 2D", "4DX"], price: 450, amenities: ["M-Ticket", "4DX Motion", "Gold Class"] },
+    { name: "INOX: Garuda Mall", area: "Magrath Road", badge: "Insignia • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 360, amenities: ["M-Ticket", "Dolby Atmos", "Gourmet F&B"] },
+    { name: "Cinepolis: Nexus Shantiniketan", area: "Whitefield", badge: "IMAX • VIP Recliners", formats: ["2D", "3D", "IMAX 2D"], price: 390, amenities: ["M-Ticket", "VIP Lounge", "Valet"] },
+    { name: "PVR: Vega City Mall", area: "Bannerghatta Road", badge: "Dual Laser IMAX", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 410, amenities: ["M-Ticket", "IMAX Screen", "Food Court"] },
+    { name: "INOX: Mantri Square", area: "Malleshwaram", badge: "4K Projection • Dolby 7.1", formats: ["2D", "3D"], price: 290, amenities: ["M-Ticket", "Metro Connected"] },
+    { name: "PVR Director's Cut: Rex Walk", area: "Brigade Road", badge: "Luxury Recliners • Atmos", formats: ["2D", "Dolby Atmos"], price: 590, amenities: ["M-Ticket", "Butler Service", "Recliners"] },
+    { name: "Cinepolis: Royal Meenakshi", area: "Hulimavu", badge: "RealD 3D • Dolby 7.1", formats: ["2D", "3D"], price: 260, amenities: ["M-Ticket", "Food & Beverage"] },
+    { name: "Gopalan Grand Cinemas", area: "Indiranagar", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 240, amenities: ["M-Ticket", "Budget Friendly"] },
+  ],
+  Mumbai: [
+    { name: "PVR ICON: Phoenix Palladium", area: "Lower Parel", badge: "IMAX Laser • Luxe", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 490, amenities: ["M-Ticket", "IMAX Laser", "Valet"] },
+    { name: "Maison INOX: Jio World Plaza", area: "Bandra Kurla Complex", badge: "Maison Luxe • Atmos", formats: ["2D", "Dolby Atmos"], price: 650, amenities: ["M-Ticket", "Dolby Atmos", "Lounge"] },
+    { name: "Sterling Cineplex: Fort", area: "Fort", badge: "Dolby Atmos • 4K", formats: ["2D", "3D", "Dolby Atmos"], price: 340, amenities: ["M-Ticket", "Dolby Atmos", "Heritage Hall"] },
+    { name: "PVR: Juhu Dynamix", area: "Juhu", badge: "4K Laser • Dolby 7.1", formats: ["2D", "3D"], price: 410, amenities: ["M-Ticket", "Recliners", "Gourmet F&B"] },
+    { name: "Cinepolis: Fun Republic", area: "Andheri West", badge: "VIP • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 380, amenities: ["M-Ticket", "VIP Lounge"] },
+    { name: "INOX: R City Ghatkopar", area: "Ghatkopar", badge: "Insignia • IMAX", formats: ["2D", "3D", "IMAX 2D"], price: 430, amenities: ["M-Ticket", "IMAX Screen"] },
+    { name: "Liberty Cinema: Marine Lines", area: "Marine Lines", badge: "Heritage 4K Atmos", formats: ["2D", "Dolby Atmos"], price: 290, amenities: ["M-Ticket", "Art Deco Auditorium"] },
+    { name: "PVR: Infinity Mall Malad", area: "Malad West", badge: "4DX • RealD 3D", formats: ["2D", "3D", "4DX"], price: 370, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "INOX: Megaplex Inorbit", area: "Malad", badge: "MX4D • ScreenX", formats: ["2D", "3D", "4DX"], price: 420, amenities: ["M-Ticket", "ScreenX"] },
+    { name: "Miraj Cinemas: Thakur Mall", area: "Dahisar", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 230, amenities: ["M-Ticket", "Budget Friendly"] },
+  ],
+  "Delhi-NCR": [
+    { name: "PVR Director's Cut: Ambience", area: "Vasant Kunj", badge: "Luxe Dining • Dolby Atmos", formats: ["2D", "Dolby Atmos"], price: 690, amenities: ["M-Ticket", "Butler Service", "Recliners"] },
+    { name: "PVR ICON: Select CITYWALK", area: "Saket", badge: "IMAX Laser • 4DX", formats: ["2D", "3D", "IMAX 2D", "4DX"], price: 470, amenities: ["M-Ticket", "IMAX Screen", "Gold Class"] },
+    { name: "INOX: Insignia Nehru Place", area: "Nehru Place", badge: "Laserplex • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 410, amenities: ["M-Ticket", "Insignia Lounge"] },
+    { name: "PVR: Plaza Connaught Place", area: "Connaught Place", badge: "Heritage 4K • Dolby 7.1", formats: ["2D", "3D"], price: 320, amenities: ["M-Ticket", "Central Location"] },
+    { name: "Cinepolis: DLF Avenue", area: "Saket", badge: "VIP • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 430, amenities: ["M-Ticket", "VIP Recliners"] },
+    { name: "PVR: Ambience Mall Gurugram", area: "Gurugram CyberHub", badge: "IMAX • Gold Class", formats: ["2D", "3D", "IMAX 2D"], price: 480, amenities: ["M-Ticket", "IMAX Laser"] },
+    { name: "INOX: Mall of India", area: "Noida Sec 18", badge: "Insignia • IMAX 4K", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 440, amenities: ["M-Ticket", "IMAX Laser"] },
+    { name: "Delite Cinema: Asaf Ali Road", area: "Daryaganj", badge: "Dolby Atmos • Balcony", formats: ["2D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "Classic Single Screen"] },
+    { name: "PVR: Pacific Mall Tagore Garden", area: "Rajouri Garden", badge: "4DX • Dolby 7.1", formats: ["2D", "3D", "4DX"], price: 350, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "Miraj Cinemas: Subhash Nagar", area: "West Delhi", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 240, amenities: ["M-Ticket", "Food & Beverage"] },
+  ],
+  Chennai: [
+    { name: "PVR: Sathyam Cinemas", area: "Royapettah", badge: "RDX Atmos • Pure Sound", formats: ["2D", "3D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "RDX Audio", "Famous Popcorn"] },
+    { name: "PVR ICON: Palazzo Nexus", area: "Vadapalani", badge: "IMAX • Luxe Lounge", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 290, amenities: ["M-Ticket", "IMAX Laser"] },
+    { name: "PVR: Escape Express Avenue", area: "Royapettah", badge: "Boutique 4K • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 230, amenities: ["M-Ticket", "Designer Screens"] },
+    { name: "Luxe Cinemas: Phoenix Mall", area: "Velachery", badge: "IMAX Laser • 4K", formats: ["2D", "3D", "IMAX 2D"], price: 280, amenities: ["M-Ticket", "IMAX Laser", "Gold Class"] },
+    { name: "Rohini Silver Screens", area: "Koyambedu", badge: "Dolby Atmos • Fan Hub", formats: ["2D", "3D", "Dolby Atmos"], price: 195, amenities: ["M-Ticket", "Atmos Audio"] },
+    { name: "AGS Cinemas: T. Nagar", area: "T. Nagar", badge: "4K Laser • Dolby 7.1", formats: ["2D", "3D"], price: 210, amenities: ["M-Ticket", "Food Court"] },
+    { name: "INOX: Chennai Citi Centre", area: "Mylapore", badge: "Insignia • Dolby", formats: ["2D", "3D"], price: 220, amenities: ["M-Ticket", "Central Access"] },
+    { name: "Kamala Cinemas: Vadapalani", area: "Vadapalani", badge: "Barco 4K • Atmos", formats: ["2D", "Dolby Atmos"], price: 190, amenities: ["M-Ticket", "Budget Friendly"] },
+    { name: "PVR: VR Chennai", area: "Anna Nagar", badge: "4DX • Dolby Atmos", formats: ["2D", "3D", "4DX", "Dolby Atmos"], price: 260, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "AGS Cinemas: OMR Navalur", area: "OMR Navalur", badge: "Dolby Atmos • 4K", formats: ["2D", "3D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "Tech Corridor"] },
+  ],
+  Pune: [
+    { name: "PVR ICON: Pavillion Mall", area: "Senapati Bapat Road", badge: "Gold Class • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 410, amenities: ["M-Ticket", "Recliners", "Valet"] },
+    { name: "Cinepolis: WestEnd Mall", area: "Aundh", badge: "IMAX 4K • VIP", formats: ["2D", "3D", "IMAX 2D"], price: 390, amenities: ["M-Ticket", "IMAX Screen"] },
+    { name: "INOX: Bund Garden", area: "Bund Garden Road", badge: "Insignia • 4K Laser", formats: ["2D", "3D"], price: 330, amenities: ["M-Ticket", "Luxury Lounge"] },
+    { name: "City Pride: Kothrud", area: "Kothrud", badge: "Dolby Atmos • Local Legend", formats: ["2D", "3D", "Dolby Atmos"], price: 260, amenities: ["M-Ticket", "Dolby Atmos"] },
+    { name: "PVR: Phoenix Marketcity Pune", area: "Viman Nagar", badge: "4DX • RealD 3D", formats: ["2D", "3D", "4DX"], price: 380, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "Cinepolis: Seasons Mall", area: "Magarpatta", badge: "4DX • Dolby 7.1", formats: ["2D", "3D", "4DX"], price: 340, amenities: ["M-Ticket", "Food Court"] },
+    { name: "INOX: Elpro City Square", area: "Chinchwad", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 270, amenities: ["M-Ticket", "Family Friendly"] },
+    { name: "E-Square Multiplex", area: "University Road", badge: "Christie 4K • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 250, amenities: ["M-Ticket", "Gourmet Cafe"] },
+    { name: "PVR: Grand Highstreet", area: "Hinjewadi", badge: "4K Laser • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 320, amenities: ["M-Ticket", "IT Park Hub"] },
+    { name: "Victory Theatre: Camp", area: "MG Road Camp", badge: "Dolby 7.1 Heritage", formats: ["2D"], price: 200, amenities: ["M-Ticket", "Classic Auditorium"] },
+  ],
+  Kolkata: [
+    { name: "INOX: South City Mall", area: "Jadavpur", badge: "IMAX Laser • Insignia", formats: ["2D", "3D", "IMAX 2D"], price: 380, amenities: ["M-Ticket", "IMAX Laser", "Lounge"] },
+    { name: "INOX: Quest Mall", area: "Ballygunge", badge: "Insignia • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 420, amenities: ["M-Ticket", "Butler Service"] },
+    { name: "PVR: Mani Square", area: "EM Bypass", badge: "4DX • 4K Laser", formats: ["2D", "3D", "4DX"], price: 350, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "Cinepolis: Acropolis Mall", area: "Kasba", badge: "VIP Recliners • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 330, amenities: ["M-Ticket", "VIP Lounge"] },
+    { name: "PVR: Diamond Plaza", area: "Nagerbazar", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 260, amenities: ["M-Ticket", "Popcorn Bar"] },
+    { name: "Navina Cinema: Tollygunge", area: "Tollygunge", badge: "4K Laser • Dolby Atmos", formats: ["2D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "Classic Auditorium"] },
+    { name: "Priya Cinema: Deshapriya Park", area: "Rashbehari", badge: "Dolby 7.1 • Heritage", formats: ["2D", "3D"], price: 200, amenities: ["M-Ticket", "Heritage Screen"] },
+    { name: "INOX: City Centre Salt Lake", area: "Salt Lake Sec 1", badge: "4K Projection • Dolby", formats: ["2D", "3D"], price: 300, amenities: ["M-Ticket", "Food Court"] },
+    { name: "Miraj Cinemas: Newtown Square", area: "New Town", badge: "Dolby Atmos • Recliners", formats: ["2D", "3D", "Dolby Atmos"], price: 270, amenities: ["M-Ticket", "Recliners"] },
+    { name: "Star Theatre: Hatibagan", area: "North Kolkata", badge: "Digital 2K • Dolby", formats: ["2D"], price: 180, amenities: ["M-Ticket", "Historic Theatre"] },
+  ],
+  Kochi: [
+    { name: "PVR: LuLu Mall", area: "Edappally", badge: "4DX • PXL Giant Screen", formats: ["2D", "3D", "IMAX 2D", "4DX"], price: 340, amenities: ["M-Ticket", "PXL Screen", "4DX"] },
+    { name: "Cinepolis: Centre Square Mall", area: "MG Road", badge: "IMAX • VIP Recliners", formats: ["2D", "3D", "IMAX 2D"], price: 360, amenities: ["M-Ticket", "IMAX Screen"] },
+    { name: "Vanitha Vineetha Cineplex", area: "Edappally", badge: "Dolby Atmos • 4K RGB", formats: ["2D", "3D", "Dolby Atmos"], price: 220, amenities: ["M-Ticket", "Dolby Atmos"] },
+    { name: "Shenoys Theatre: MG Road", area: "MG Road", badge: "Christie 4K • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 210, amenities: ["M-Ticket", "Recliners"] },
+    { name: "PVR: Forum Mall Kochi", area: "Maradu", badge: "Luxe • PXL Laser", formats: ["2D", "3D", "Dolby Atmos"], price: 350, amenities: ["M-Ticket", "Luxury Seating"] },
+    { name: "Q Cinemas: Gold Souk Grande", area: "Vyttila", badge: "Barco 4K • Dolby 7.1", formats: ["2D", "3D"], price: 240, amenities: ["M-Ticket", "Food Court"] },
+    { name: "Kavitha Theatre: MG Road", area: "Ernakulam", badge: "4K Laser • Dolby Atmos", formats: ["2D", "Dolby Atmos"], price: 195, amenities: ["M-Ticket", "Classic Hub"] },
+    { name: "Pan Cinemas: Nucleus Mall", area: "Maradu", badge: "Dolby 7.1 • RealD 3D", formats: ["2D", "3D"], price: 210, amenities: ["M-Ticket", "Budget Friendly"] },
+    { name: "Padma Cinema: MG Road", area: "Ernakulam", badge: "4K Digital • Atmos", formats: ["2D", "Dolby Atmos"], price: 190, amenities: ["M-Ticket", "Heritage Cinema"] },
+    { name: "M Cinemas: Varapuzha", area: "Varapuzha", badge: "Dolby Atmos • 4K", formats: ["2D", "3D"], price: 200, amenities: ["M-Ticket", "Family Seating"] },
+  ],
+  Chandigarh: [
+    { name: "PVR: Elante Mall", area: "Industrial Area Phase 1", badge: "4DX • Gold Class", formats: ["2D", "3D", "IMAX 2D", "4DX"], price: 390, amenities: ["M-Ticket", "4DX Motion", "Lounge"] },
+    { name: "Cinepolis: Jagat Mall", area: "Sector 17", badge: "4K Laser • Dolby Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 310, amenities: ["M-Ticket", "Dolby Atmos"] },
+    { name: "PVR: Centra Mall", area: "Industrial Area", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 280, amenities: ["M-Ticket", "Food Court"] },
+    { name: "INOX: NH22 Mall", area: "Panchkula", badge: "Insignia • 4K", formats: ["2D", "3D"], price: 300, amenities: ["M-Ticket", "Recliners"] },
+    { name: "PVR: VR Punjab", area: "Kharar Road", badge: "IMAX • Dolby Atmos", formats: ["2D", "3D", "IMAX 2D"], price: 360, amenities: ["M-Ticket", "IMAX Screen"] },
+    { name: "Piccadily Square: Sector 34", area: "Sector 34A", badge: "Christie 4K • Atmos", formats: ["2D", "Dolby Atmos"], price: 260, amenities: ["M-Ticket", "Cafe Lounge"] },
+    { name: "Cinepolis: Bestech Square", area: "Mohali", badge: "VIP • RealD 3D", formats: ["2D", "3D"], price: 310, amenities: ["M-Ticket", "VIP Seats"] },
+    { name: "Fun Cinemas: Republic", area: "Manimajra", badge: "Dolby 7.1", formats: ["2D", "3D"], price: 230, amenities: ["M-Ticket", "Budget Friendly"] },
+    { name: "Miraj Cinemas: Cosmo Plaza", area: "Zirakpur", badge: "Dolby Atmos • 4K", formats: ["2D", "3D", "Dolby Atmos"], price: 250, amenities: ["M-Ticket", "Atmos Sound"] },
+    { name: "Neelam Theatre: Sector 17", area: "Sector 17E", badge: "Classic 4K Digital", formats: ["2D"], price: 190, amenities: ["M-Ticket", "Heritage Cinema"] },
+  ],
+  Ahmedabad: [
+    { name: "PVR: Acropolis Mall", area: "Thaltej", badge: "IMAX Laser • Luxe", formats: ["2D", "3D", "IMAX 2D", "IMAX 3D"], price: 380, amenities: ["M-Ticket", "IMAX Laser", "Recliners"] },
+    { name: "NY Cinemas: Ahmedabad One", area: "Vastrapur", badge: "Dolby Atmos • 4K", formats: ["2D", "3D", "Dolby Atmos"], price: 350, amenities: ["M-Ticket", "Dolby Atmos", "Lounge"] },
+    { name: "Cinepolis: AlphaOne", area: "Vastrapur", badge: "4DX • VIP Seats", formats: ["2D", "3D", "4DX"], price: 360, amenities: ["M-Ticket", "4DX Motion"] },
+    { name: "INOX: Himalaya Mall", area: "Drive-In Road", badge: "Insignia • Dolby 7.1", formats: ["2D", "3D"], price: 310, amenities: ["M-Ticket", "Luxury Seating"] },
+    { name: "PVR: Motera Sangath", area: "Chandkheda", badge: "4K Projection • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 290, amenities: ["M-Ticket", "Dolby Atmos"] },
+    { name: "Wide Angle Multiplex", area: "SG Highway", badge: "Christie 4K • Dolby", formats: ["2D", "3D"], price: 260, amenities: ["M-Ticket", "Food Court"] },
+    { name: "Rajhans Cinemas: Nikol", area: "Nikol", badge: "Barco 4K • Atmos", formats: ["2D", "3D", "Dolby Atmos"], price: 230, amenities: ["M-Ticket", "Budget Friendly"] },
+    { name: "PVR: Palladium Ahmedabad", area: "SG Highway", badge: "Luxe • Dual Laser", formats: ["2D", "3D", "IMAX 2D"], price: 450, amenities: ["M-Ticket", "Gold Class"] },
+    { name: "City Gold Multiplex", area: "Ashram Road", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 210, amenities: ["M-Ticket", "Central Access"] },
+    { name: "Miraj Cinemas: Shalin", area: "Science City", badge: "Dolby Atmos • Recliners", formats: ["2D", "3D", "Dolby Atmos"], price: 250, amenities: ["M-Ticket", "Recliners"] },
+  ],
 };
 
-const THEATRE_TEMPLATES = [
-  { name: "AMB Cinemas", badge: "Dolby Atmos • 4K Laser", formats: ["2D", "3D", "Dolby Atmos"], price: 320, amenities: ["M-Ticket", "Dolby Atmos", "Gourmet F&B"] },
-  { name: "PVR ICON: Laserplex", badge: "IMAX 4K • Dolby 7.1", formats: ["IMAX 2D", "IMAX 3D", "2D"], price: 420, amenities: ["M-Ticket", "IMAX Laser", "Recliners"] },
-  { name: "INOX Megaplex", badge: "Insignia • Dolby Atmos", formats: ["2D", "3D", "4DX"], price: 360, amenities: ["M-Ticket", "Food & Beverage", "Valet"] },
-  { name: "Prasads Multiplex", badge: "PCX Giant Screen", formats: ["2D", "3D", "IMAX 2D"], price: 295, amenities: ["M-Ticket", "PCX Screen", "Food Court"] },
-  { name: "Cinepolis VIP", badge: "Luxury Recliners • 4K", formats: ["2D", "3D"], price: 450, amenities: ["M-Ticket", "Butler Service", "Recliners"] },
-  { name: "Asian Mukta A2 Cinemas", badge: "RGB 4K Laser • Dolby", formats: ["2D", "3D"], price: 240, amenities: ["M-Ticket", "Food & Beverage"] },
-  { name: "Sathyam Cinemas", badge: "RDX Atmos • Pure Sound", formats: ["2D", "Dolby Atmos"], price: 260, amenities: ["M-Ticket", "RDX Audio", "Popcorn Bar"] },
-  { name: "Miraj Cinemas", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 220, amenities: ["M-Ticket", "Budget Friendly"] },
-  { name: "PVR Director's Cut", badge: "Gold Class • Luxe", formats: ["2D", "IMAX 2D"], price: 490, amenities: ["M-Ticket", "Lounge Access", "Recliners"] },
-  { name: "IMAX Central Plaza", badge: "Dual Laser IMAX", formats: ["IMAX 2D", "IMAX 3D", "4DX"], price: 390, amenities: ["M-Ticket", "IMAX Laser", "Food & Beverage"] },
-];
+function buildTheatresForMovie(movieId, city = "Bengaluru") {
+  const normalizedCity = Object.keys(CITY_THEATRES_MAP).find(
+    (c) => c.toLowerCase() === String(city || "").trim().toLowerCase()
+  ) || "Bengaluru";
 
-function buildTheatresForMovie(movieId, city = "Hyderabad") {
-  const areas = CITY_AREA_MAP[city] || CITY_AREA_MAP.Bengaluru;
+  const cityVenues = CITY_THEATRES_MAP[normalizedCity];
   const seed = String(movieId)
     .split("")
     .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
 
-  return THEATRE_TEMPLATES.map((tpl, idx) => {
-    const area = areas[(idx + seed) % areas.length];
+  return cityVenues.map((venue, idx) => {
     const baseTimes = ["09:45 AM", "12:30 PM", "03:45 PM", "07:15 PM", "10:30 PM"];
     const slots = baseTimes.map((t, sIdx) => ({
       time: t,
@@ -426,15 +531,15 @@ function buildTheatresForMovie(movieId, city = "Hyderabad") {
     }));
 
     return {
-      id: `th-${idx + 1}`,
-      name: `${tpl.name}: ${area}`,
-      shortName: tpl.name,
-      area,
-      city,
-      badge: tpl.badge,
-      formats: tpl.formats,
-      basePrice: tpl.price,
-      amenities: tpl.amenities,
+      id: `${normalizedCity.toLowerCase().replace(/[^a-z]/g, "")}-th-${idx + 1}`,
+      name: venue.name,
+      shortName: venue.name.split(":")[0].trim(),
+      area: venue.area,
+      city: normalizedCity,
+      badge: venue.badge,
+      formats: venue.formats,
+      basePrice: venue.price,
+      amenities: venue.amenities,
       cancellable: idx % 2 === 0,
       slots,
     };

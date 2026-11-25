@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import { requestForToken, onMessageListener } from "./firebase";
 import Navbar from "./components/Navbar";
@@ -15,8 +15,6 @@ import MovieDetails from "./pages/MovieDetails";
 import SeatSelection from "./pages/SeatSelection";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import MovieTeamLogin from "./pages/MovieTeamLogin";
-import SuperAdminLogin from "./pages/SuperAdminLogin";
 import UserDashboard from "./pages/UserDashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -26,6 +24,8 @@ import QuickReview from "./pages/QuickReview";
 import PartnerWithUs from "./pages/PartnerWithUs";
 import PartnerStatus from "./pages/PartnerStatus";
 import About from "./pages/About";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import Unauthorized from "./pages/Unauthorized";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import {
@@ -118,9 +118,10 @@ function App() {
 
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/team/login" element={<MovieTeamLogin />} />
-            <Route path="/super-admin-login" element={<SuperAdminLogin />} />
+            <Route path="/team/login" element={<Navigate to="/login" replace />} />
+            <Route path="/super-admin-login" element={<Navigate to="/login" replace />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
 
             <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
@@ -146,6 +147,8 @@ function App() {
             <Route path="/partner" element={<PartnerWithUs />} />
             <Route path="/partner-status" element={<PartnerStatus />} />
             <Route path="/about" element={<About />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/list-your-show" element={<PartnerWithUs />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="*" element={<Home />} />

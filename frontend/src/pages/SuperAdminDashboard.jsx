@@ -226,7 +226,7 @@ const SuperAdminDashboard = () => {
   if (loading) return <LoadingSpinner fullPage message="Loading Core Systems..." />;
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-28 lg:pb-20 min-w-0">
       {/* Header */}
       <div className="bg-[#0e111b]/65 backdrop-blur-2xl border-b border-white/[0.1] pt-10 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
@@ -366,9 +366,9 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
           {/* Team Creation Form */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 min-w-0">
             <div className="glass-panel rounded-3xl p-7 sticky top-24">
               <h2 className="text-lg font-bold text-white mb-5 flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-[#ff2e3b]" /> Create Movie Team
@@ -407,15 +407,14 @@ const SuperAdminDashboard = () => {
                 </div>
                 <div>
                   <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">
-                    Team Password
+                    Team Password (Optional)
                   </label>
                   <input
-                    required
                     type="password"
                     value={newTeam.password}
                     onChange={(e) => setNewTeam({ ...newTeam, password: e.target.value })}
                     className="w-full bg-white/[0.04] border border-white/[0.1] px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-[#e50914] text-xs text-white"
-                    placeholder="••••••••"
+                    placeholder="Optional if team uses Secret Key"
                   />
                 </div>
                 <div>
@@ -469,7 +468,7 @@ const SuperAdminDashboard = () => {
           </div>
 
           {/* Tabbed Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 min-w-0">
             <div className="flex gap-2 border-b border-white/[0.08] pb-3 overflow-x-auto">
               {[
                 { id: "teams", label: "Teams" },
@@ -508,11 +507,11 @@ const SuperAdminDashboard = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto">
+                    <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto min-w-0">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="text-slate-400">Key:</span>
+                        <span className="text-slate-400">Secret Key:</span>
                         <span className="font-mono font-bold text-white bg-white/[0.08] px-2.5 py-0.5 rounded">
-                          {team.secretKey}
+                          {team.secretKeyHint || team.secretKey || "Configured"}
                         </span>
                       </div>
                       <div className="flex gap-1.5 flex-wrap">
@@ -712,12 +711,12 @@ const SuperAdminDashboard = () => {
             </button>
             <h3 className="text-xl font-bold text-white">Edit Movie Team</h3>
             {[
-              ["Team Name", "name", "text"],
-              ["Team Email", "email", "email"],
-              ["New Password (optional)", "password", "password"],
-              ["Secret Key", "secretKey", "text"],
-              ["Assigned Movie IDs", "assignedMoviesInput", "text"],
-            ].map(([label, key, type]) => (
+              ["Team Name", "name", "text", ""],
+              ["Team Email", "email", "email", ""],
+              ["New Password (optional)", "password", "password", "Leave blank to keep existing"],
+              ["New Secret Key (optional)", "secretKey", "text", "Leave blank to keep existing key"],
+              ["Assigned Movie IDs", "assignedMoviesInput", "text", "e.g. 550, 157336"],
+            ].map(([label, key, type, placeholder]) => (
               <label
                 key={key}
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"
@@ -725,12 +724,13 @@ const SuperAdminDashboard = () => {
                 {label}
                 <input
                   type={type}
+                  placeholder={placeholder}
                   value={editingTeam[key] || ""}
                   onChange={(e) =>
                     setEditingTeam({ ...editingTeam, [key]: e.target.value })
                   }
                   className="mt-1.5 w-full bg-white/[0.04] border border-white/[0.1] px-3.5 py-2.5 rounded-xl text-xs text-white focus:outline-none focus:border-[#e50914]"
-                  required={key !== "password"}
+                  required={key === "name" || key === "email"}
                 />
               </label>
             ))}

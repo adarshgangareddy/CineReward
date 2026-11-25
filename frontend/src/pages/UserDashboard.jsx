@@ -11,6 +11,10 @@ import {
   Gift,
   ArrowRight,
   Bookmark,
+  Printer,
+  Calendar,
+  Clock,
+  MapPin,
 } from "lucide-react";
 import { getActiveSession, saveRoleSession } from "../utils/auth";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -27,6 +31,7 @@ const UserDashboard = () => {
     rating: 10,
     comment: "",
   });
+  const [selectedPass, setSelectedPass] = useState(null);
 
   useEffect(() => {
     fetchTickets();
@@ -107,8 +112,8 @@ const UserDashboard = () => {
   if (loading) return <LoadingSpinner fullPage message="Loading Your Cinema Profile..." />;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      <div className="flex flex-col lg:flex-row gap-8 items-start">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-28 lg:py-10 min-w-0">
+      <div className="flex flex-col lg:flex-row gap-6 sm:gap-8 items-start min-w-0">
         {/* Glass Profile Sidebar */}
         <div className="w-full lg:w-80 space-y-4 shrink-0">
           <div className="glass-panel rounded-3xl p-7 relative overflow-hidden">
@@ -194,71 +199,102 @@ const UserDashboard = () => {
             {activeTickets.map((ticket) => (
               <div
                 key={ticket._id}
-                className="glass-card-hover rounded-3xl p-6 flex flex-col sm:flex-row gap-6"
+                className="glass-card-hover rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row gap-5 min-w-0 overflow-hidden"
               >
-                <div className="flex-grow">
-                  <div className="flex justify-between items-start gap-4 mb-5">
-                    <div>
-                      <h2 className="text-xl font-bold text-white mb-1">
+                <div className="flex-grow min-w-0">
+                  <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
+                    <div className="min-w-0">
+                      <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-1">
+                        <Ticket className="w-3 h-3" /> M-Ticket Confirmed
+                      </div>
+                      <h2 className="text-lg sm:text-xl font-bold text-white mb-1 break-words">
                         {ticket.movieTitle || "Movie Ticket"}
                       </h2>
-                      <p className="text-[#ff2e3b] font-semibold text-xs">
-                        {ticket.theatre}
+                      <p className="text-slate-300 font-medium text-xs flex items-center gap-1.5 break-words">
+                        <MapPin className="w-3.5 h-3.5 text-[#ff2e3b] shrink-0" />
+                        <span>{ticket.theatre}</span>
                       </p>
                     </div>
-                    {ticket.reviewSubmitted ? (
-                      <span className="bg-emerald-500/15 text-emerald-300 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" /> Reviewed
-                      </span>
-                    ) : (
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() =>
-                          setReviewForm({
-                            ...reviewForm,
-                            ticketId: ticket._id,
-                            movieId: ticket.movieId,
-                          })
-                        }
-                        className="btn-crimson text-[11px] px-4 py-1.5 rounded-full flex items-center gap-1.5"
+                        onClick={() => setSelectedPass(ticket)}
+                        className="glass-button text-[11px] font-bold px-3.5 py-1.5 rounded-full inline-flex items-center gap-1.5"
                       >
-                        <MessageSquare className="w-3 h-3" /> Rate &amp; Earn
+                        <Printer className="w-3 h-3" /> Pass
                       </button>
-                    )}
+                      {ticket.reviewSubmitted ? (
+                        <span className="bg-emerald-500/15 text-emerald-300 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Reviewed
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReviewForm({
+                              ...reviewForm,
+                              ticketId: ticket._id,
+                              movieId: ticket.movieId,
+                            })
+                          }
+                          className="btn-crimson text-[11px] px-4 py-1.5 rounded-full flex items-center gap-1.5"
+                        >
+                          <MessageSquare className="w-3 h-3" /> Rate &amp; Earn
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 text-xs">
-                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    <div className="bg-white/[0.04] rounded-2xl p-3 border border-white/[0.08] min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">
                         Seats
                       </span>
-                      <span className="text-white font-semibold">{ticket.seatNumber}</span>
+                      <span className="text-white font-bold break-words">
+                        {ticket.seatNumber}
+                      </span>
                     </div>
-                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                        Date
+                    <div className="bg-white/[0.04] rounded-2xl p-3 border border-white/[0.08] min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-0.5">
+                        <Calendar className="w-3 h-3" /> Date
                       </span>
                       <span className="text-white font-semibold">{ticket.date}</span>
                     </div>
-                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                        Time
+                    <div className="bg-white/[0.04] rounded-2xl p-3 border border-white/[0.08] min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-0.5">
+                        <Clock className="w-3 h-3" /> Time
                       </span>
-                      <span className="text-white font-semibold">{ticket.time}</span>
+                      <span className="text-emerald-400 font-semibold">
+                        {ticket.time}
+                      </span>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-2xl p-3 border border-white/[0.08] min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">
+                        Total Paid
+                      </span>
+                      <span className="text-white font-bold">
+                        ₹{ticket.price ?? 0}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="sm:border-l sm:border-white/[0.08] sm:pl-6 flex flex-col justify-center items-center min-w-[110px]">
-                  <div className="w-16 h-16 bg-white/[0.04] rounded-2xl border border-white/[0.08] flex items-center justify-center mb-2">
-                    <Ticket className="w-7 h-7 text-slate-400" />
+                <div className="sm:border-l sm:border-dashed sm:border-white/[0.15] sm:pl-5 flex sm:flex-col justify-between sm:justify-center items-center sm:min-w-[125px] pt-3 sm:pt-0 border-t border-dashed border-white/10 sm:border-t-0">
+                  <div className="text-left sm:text-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                      Booking ID
+                    </span>
+                    <span className="text-white font-mono text-xs font-bold tracking-wider">
+                      #{ticket._id.slice(-8).toUpperCase()}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">
-                    Ticket ID
-                  </span>
-                  <span className="text-white font-mono text-xs mt-0.5">
-                    #{ticket._id.slice(-6).toUpperCase()}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPass(ticket)}
+                    className="sm:mt-3 bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.12] rounded-xl px-3 py-2 text-[10px] font-bold text-slate-200 uppercase tracking-wider"
+                  >
+                    Show Barcode
+                  </button>
                 </div>
               </div>
             ))}
@@ -282,6 +318,75 @@ const UserDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* M-Ticket Boarding Pass Modal */}
+      {selectedPass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-7 space-y-5">
+            <div className="flex justify-between items-start gap-4 border-b border-white/10 pb-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold">
+                  CineReward Digital M-Ticket
+                </p>
+                <h3 className="text-xl font-extrabold text-white mt-1">
+                  {selectedPass.movieTitle || "Cinema Ticket"}
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  {selectedPass.theatre}
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-white/[0.08] text-[10px] font-mono text-white">
+                #{selectedPass._id.slice(-8).toUpperCase()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-white/[0.04] rounded-xl p-3 border border-white/[0.08]">
+                <span className="text-slate-400 block text-[10px] uppercase">Date &amp; Time</span>
+                <span className="text-white font-bold mt-0.5 block">
+                  {selectedPass.date} • {selectedPass.time}
+                </span>
+              </div>
+              <div className="bg-white/[0.04] rounded-xl p-3 border border-white/[0.08]">
+                <span className="text-slate-400 block text-[10px] uppercase">Seats</span>
+                <span className="text-white font-bold mt-0.5 block">
+                  {selectedPass.seatNumber}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl p-3 flex items-center justify-center gap-[3px]">
+              {Array.from({ length: 30 }, (_, i) => (
+                <span
+                  key={i}
+                  className="bg-slate-950 h-9 inline-block"
+                  style={{ width: i % 3 === 0 ? "3px" : i % 2 === 0 ? "2px" : "1px" }}
+                />
+              ))}
+            </div>
+            <p className="text-center text-[11px] text-slate-400">
+              Present this M-Ticket at {selectedPass.theatre}. Arrive 20 mins before showtime.
+            </p>
+
+            <div className="flex gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 glass-button py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" /> Print Pass
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPass(null)}
+                className="flex-1 btn-crimson py-2.5 rounded-xl text-xs font-bold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Verified Ticket Review Modal */}
       {reviewForm.ticketId && (

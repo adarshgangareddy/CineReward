@@ -1,10 +1,16 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const MovieTeam = require("../models/MovieTeam");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const emailService = require("../services/emailService");
+const { getFirebaseAdmin } = require("../config/notifications");
+const {
+  hashSecret,
+  verifySecret,
+  digestSecret,
+  formatKeyHint,
+} = require("../utils/passwordHash");
 
 const generateToken = (user) => {
   return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
@@ -22,6 +28,34 @@ const formatUserResponse = (user) => ({
   role: user.role || "user",
   profilePicture: user.profilePicture || "",
 });
+
+const formatTeamResponse = (team) => ({
+  id: team._id,
+  name: team.name,
+  email: team.email,
+  role: "movie_team",
+  assignedMovies: team.assignedMovies || [],
+  freeTicketsCount: team.freeTicketsCount || 0,
+  secretKeyHint:
+    team.secretKeyHint ||
+    (team.secretKey ? formatKeyHint(team.secretKey) : "Configured"),
+});
+
+const verifyMovieTeamCredential = async (team, credential, explicitKey) => {
+  const candidates = [explicitKey, credential].filter(Boolean);
+  for (const cand of candidates) {
+    if (team.secretKeyHash && (await verifySecret(team.secretKeyHash, cand))) {
+      return true;
+    }
+    if (team.secretKey && String(cand).trim() === String(team.secretKey).trim()) {
+      return true;
+    }
+    if (team.password && (await verifySecret(team.password, cand))) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const authController = {
   signup: async (req, res) => {
@@ -54,8 +88,7 @@ const authController = {
         });
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const hashedPassword = await hashSecret(password);
 
       const user = new User({
         name: trimmedName,
@@ -84,10 +117,12 @@ const authController = {
     try {
       const { identifier, email, password, secretKey } = req.body;
       const loginIdentifier = (identifier || email || secretKey || "").trim();
-      if (!loginIdentifier || !password) {
-        return res
-          .status(400)
-          .json({ message: "Email/username/secret key and password are required" });
+      const credential = password || secretKey || "";
+
+      if (!loginIdentifier || !credential) {
+        return res.status(400).json({
+          message: "Email/username/team ID and password or secret key are required",
+        });
       }
 
       const normalizedIdentifier = loginIdentifier.toLowerCase();
@@ -108,8 +143,12 @@ const authController = {
           (adminUsername && normalizedIdentifier === adminUsername)
       );
 
-      // 1. Admin authentication by email or username + password
-      if (matchesAdminIdentity && adminPassword && password === adminPassword) {
+      // 1. Admin authentication via email/username + password
+      if (
+        matchesAdminIdentity &&
+        adminPassword &&
+        (await verifySecret(adminPassword, credential))
+      ) {
         if (secretKey && adminSecret && secretKey.trim() !== adminSecret) {
           return res.status(401).json({
             message: "Admin secret code is incorrect",
@@ -141,33 +180,29 @@ const authController = {
         });
       }
 
-      // 2. Movie Team login via Team Email OR Secret Key + Password
-      const teamQuery = secretKey
-        ? {
-            $or: [
-              { email: normalizedIdentifier },
-              { secretKey: secretKey.trim() },
-            ],
-          }
-        : {
-            $or: [
-              { email: normalizedIdentifier },
-              { secretKey: loginIdentifier },
-            ],
-          };
+      // 2. Unified Movie Team authentication: email + secretKey OR email + password OR secretKey alone
+      const digestFromId = digestSecret(loginIdentifier);
+      const digestFromKey = digestSecret(secretKey || credential);
 
-      const team = await MovieTeam.findOne(teamQuery);
+      const team = await MovieTeam.findOne({
+        $or: [
+          { email: normalizedIdentifier },
+          { secretKeyDigest: digestFromId },
+          ...(digestFromKey ? [{ secretKeyDigest: digestFromKey }] : []),
+          { secretKey: loginIdentifier },
+        ],
+      });
+
       if (team) {
-        const teamPasswordMatches = await bcrypt.compare(password, team.password);
-        if (!teamPasswordMatches) {
+        const validTeamCred = await verifyMovieTeamCredential(
+          team,
+          credential,
+          secretKey
+        );
+        if (!validTeamCred) {
           return res
             .status(401)
-            .json({ message: "Invalid movie team credentials" });
-        }
-        if (secretKey && team.secretKey !== secretKey.trim()) {
-          return res
-            .status(401)
-            .json({ message: "Movie team secret key is incorrect" });
+            .json({ message: "Invalid movie team credentials or secret key" });
         }
 
         const token = jwt.sign(
@@ -177,18 +212,11 @@ const authController = {
         );
         return res.json({
           token,
-          user: {
-            id: team._id,
-            name: team.name,
-            email: team.email,
-            role: "movie_team",
-            assignedMovies: team.assignedMovies,
-            freeTicketsCount: team.freeTicketsCount,
-          },
+          user: formatTeamResponse(team),
         });
       }
 
-      // 3. Regular User login via Email or Username + Password
+      // 3. Regular User authentication via email or username + password (Argon2d verified)
       const user = await User.findOne({
         $or: [
           { email: normalizedIdentifier },
@@ -204,11 +232,11 @@ const authController = {
       if (!user.password) {
         return res.status(401).json({
           message:
-            "This account uses Google or Phone Sign-In. Please continue with Google or use Forgot Password to set a password.",
+            "This account uses Social or Phone Sign-In. Please continue with Google/X/Phone or reset with your 8-digit email code.",
         });
       }
 
-      const isMatch = await bcrypt.compare(password, user.password);
+      const isMatch = await verifySecret(user.password, credential);
       if (!isMatch) {
         return res
           .status(401)
@@ -222,6 +250,63 @@ const authController = {
       });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
+    }
+  },
+
+  firebaseSocialLogin: async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return res.status(400).json({ message: "Firebase ID token is required" });
+      }
+      const adminSdk = getFirebaseAdmin();
+      if (!adminSdk) {
+        return res
+          .status(503)
+          .json({ message: "Firebase authentication is not initialized on server" });
+      }
+
+      const decoded = await adminSdk.auth().verifyIdToken(idToken);
+      const email = decoded.email ? decoded.email.trim().toLowerCase() : null;
+      const phone = decoded.phone_number || null;
+      const provider = decoded.firebase?.sign_in_provider || "social";
+
+      let user = await User.findOne({
+        $or: [
+          { firebaseUid: decoded.uid },
+          ...(email ? [{ email }] : []),
+          ...(phone ? [{ phone }] : []),
+        ],
+      });
+
+      if (!user) {
+        user = await User.create({
+          name: decoded.name || (email ? email.split("@")[0] : "CineReward Member"),
+          email: email || undefined,
+          phone: phone || undefined,
+          firebaseUid: decoded.uid,
+          xId: provider === "twitter.com" ? decoded.uid : undefined,
+          profilePicture: decoded.picture || "",
+          coins: 0,
+        });
+      } else {
+        if (!user.firebaseUid) user.firebaseUid = decoded.uid;
+        if (!user.profilePicture && decoded.picture) {
+          user.profilePicture = decoded.picture;
+        }
+        await user.save();
+      }
+
+      const token = generateToken(user);
+      return res.json({
+        token,
+        user: formatUserResponse(user),
+      });
+    } catch (err) {
+      console.error("[Firebase Auth Error]:", err.message);
+      return res
+        .status(401)
+        .json({ message: "Social sign-in verification failed" });
     }
   },
 
@@ -252,23 +337,16 @@ const authController = {
       }
 
       if (req.auth.role === "movie_team") {
-        const team = await MovieTeam.findById(req.auth.id).select("-password");
+        const team = await MovieTeam.findById(req.auth.id).select(
+          "-password -secretKeyHash -secretKeyDigest -secretKey -resetCodeHash"
+        );
         if (!team) {
           return res.status(404).json({ message: "Movie team not found" });
         }
-        return res.json({
-          user: {
-            id: team._id,
-            name: team.name,
-            email: team.email,
-            role: "movie_team",
-            assignedMovies: team.assignedMovies,
-            freeTicketsCount: team.freeTicketsCount,
-          },
-        });
+        return res.json({ user: formatTeamResponse(team) });
       }
 
-      const user = await User.findById(req.auth.id).select("-password");
+      const user = await User.findById(req.auth.id).select("-password -resetCodeHash");
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -301,7 +379,7 @@ const authController = {
           .json({ message: "UID and Phone number are required" });
       }
 
-      let user = await User.findOne({ $or: [{ phone }, { googleId: uid }] });
+      let user = await User.findOne({ $or: [{ phone }, { googleId: uid }, { firebaseUid: uid }] });
 
       if (user) {
         const token = generateToken(user);
@@ -315,7 +393,7 @@ const authController = {
       user = new User({
         name: defaultName,
         phone,
-        googleId: uid,
+        firebaseUid: uid,
       });
 
       await user.save();
@@ -329,8 +407,7 @@ const authController = {
       console.error("Phone Auth Error:", err);
       if (err.code === 11000) {
         return res.status(400).json({
-          message:
-            "An account with this phone number or credentials already exists.",
+          message: "An account with this phone number already exists.",
         });
       }
       res.status(500).json({
@@ -347,34 +424,82 @@ const authController = {
         return res.status(400).json({ message: "Email address is required" });
       }
 
-      const user = await User.findOne({ email: normalizedEmail });
-      if (!user)
+      let account = await User.findOne({ email: normalizedEmail });
+      let accountRole = "user";
+
+      if (!account) {
+        account = await MovieTeam.findOne({ email: normalizedEmail });
+        if (account) accountRole = "movie_team";
+      }
+
+      if (!account) {
         return res
           .status(404)
-          .json({ message: "No account found with that email" });
+          .json({ message: "No User or Movie Team account found with that email" });
+      }
 
-      const token = crypto.randomBytes(20).toString("hex");
-      user.resetPasswordToken = token;
-      user.resetPasswordExpires = Date.now() + 3600000;
-      await user.save();
+      const code = String(crypto.randomInt(10000000, 100000000));
+      account.resetCodeHash = await hashSecret(code);
+      account.resetCodeExpires = Date.now() + 15 * 60 * 1000;
+      await account.save();
 
-      const frontendUrl = (
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      ).replace(/\/$/, "");
-      const resetUrl = `${frontendUrl}/reset-password/${token}`;
-
-      const emailSent = await emailService.sendPasswordResetEmail(
-        user.email,
-        resetUrl
+      const emailSent = await emailService.sendResetCodeEmail(
+        normalizedEmail,
+        code,
+        accountRole
       );
       if (!emailSent) {
         return res.status(503).json({
           message:
-            "Password reset email could not be delivered right now. Please check email server configuration.",
+            "Verification email could not be delivered right now. Please check server SMTP/Resend settings.",
         });
       }
 
-      res.json({ message: "Password reset link sent to your email" });
+      return res.json({
+        message: "An 8-digit verification code has been sent to your email.",
+        accountRole,
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  },
+
+  verifyResetCode: async (req, res) => {
+    try {
+      const normalizedEmail = req.body?.email?.trim().toLowerCase();
+      const code = req.body?.code?.trim();
+      if (!normalizedEmail || !/^\d{8}$/.test(code || "")) {
+        return res.status(400).json({
+          message: "Email and a valid 8-digit verification code are required",
+        });
+      }
+
+      let account = await User.findOne({ email: normalizedEmail });
+      let accountRole = "user";
+      if (!account) {
+        account = await MovieTeam.findOne({ email: normalizedEmail });
+        if (account) accountRole = "movie_team";
+      }
+
+      if (
+        !account ||
+        !account.resetCodeHash ||
+        !account.resetCodeExpires ||
+        account.resetCodeExpires < Date.now()
+      ) {
+        return res.status(400).json({
+          message: "Verification code is invalid or has expired",
+        });
+      }
+
+      const codeOk = await verifySecret(account.resetCodeHash, code);
+      if (!codeOk) {
+        return res
+          .status(400)
+          .json({ message: "Incorrect 8-digit verification code" });
+      }
+
+      return res.json({ valid: true, accountRole });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
     }
@@ -382,10 +507,93 @@ const authController = {
 
   resetPassword: async (req, res) => {
     try {
-      const { token, password } = req.body;
-      if (!token || !password || password.length < 6) {
+      const { email, code, token, password, newPassword, newSecretKey } = req.body;
+      const nextPassword = (newPassword || password || "").trim();
+      const nextSecret = (newSecretKey || "").trim();
+
+      // Primary flow: Email + 8-digit code
+      if (email && code) {
+        const normalizedEmail = email.trim().toLowerCase();
+        const trimmedCode = code.trim();
+        if (!/^\d{8}$/.test(trimmedCode)) {
+          return res
+            .status(400)
+            .json({ message: "Please enter the exact 8-digit verification code" });
+        }
+
+        let account = await User.findOne({ email: normalizedEmail });
+        let isTeam = false;
+        if (!account) {
+          account = await MovieTeam.findOne({ email: normalizedEmail });
+          isTeam = Boolean(account);
+        }
+
+        if (
+          !account ||
+          !account.resetCodeHash ||
+          !account.resetCodeExpires ||
+          account.resetCodeExpires < Date.now()
+        ) {
+          return res.status(400).json({
+            message: "Verification code is invalid or expired. Request a new code.",
+          });
+        }
+
+        const codeValid = await verifySecret(account.resetCodeHash, trimmedCode);
+        if (!codeValid) {
+          return res.status(400).json({ message: "Invalid 8-digit verification code" });
+        }
+
+        if (isTeam) {
+          if (!nextSecret && !nextPassword) {
+            return res.status(400).json({
+              message: "Enter a new Secret Key or Password (minimum 6 characters)",
+            });
+          }
+          if (nextSecret) {
+            if (nextSecret.length < 6) {
+              return res
+                .status(400)
+                .json({ message: "Secret key must be at least 6 characters" });
+            }
+            account.secretKeyDigest = digestSecret(nextSecret);
+            account.secretKeyHash = await hashSecret(nextSecret);
+            account.secretKeyHint = formatKeyHint(nextSecret);
+            account.secretKey = undefined;
+          }
+          if (nextPassword) {
+            if (nextPassword.length < 6) {
+              return res
+                .status(400)
+                .json({ message: "Password must be at least 6 characters" });
+            }
+            account.password = await hashSecret(nextPassword);
+          }
+        } else {
+          if (!nextPassword || nextPassword.length < 6) {
+            return res
+              .status(400)
+              .json({ message: "Password must be at least 6 characters" });
+          }
+          account.password = await hashSecret(nextPassword);
+        }
+
+        account.resetCodeHash = undefined;
+        account.resetCodeExpires = undefined;
+        await account.save();
+
+        return res.json({
+          message: isTeam
+            ? "Movie Team credentials updated successfully"
+            : "Password reset successfully",
+        });
+      }
+
+      // Legacy fallback: hex reset token
+      if (!token || !nextPassword || nextPassword.length < 6) {
         return res.status(400).json({
-          message: "Valid token and password (minimum 6 characters) are required",
+          message:
+            "Email, 8-digit verification code, and new password/key (min 6 chars) are required",
         });
       }
 
@@ -394,18 +602,18 @@ const authController = {
         resetPasswordExpires: { $gt: Date.now() },
       });
 
-      if (!user)
+      if (!user) {
         return res
           .status(400)
           .json({ message: "Invalid or expired reset token" });
+      }
 
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(password, salt);
+      user.password = await hashSecret(nextPassword);
       user.resetPasswordToken = undefined;
       user.resetPasswordExpires = undefined;
       await user.save();
 
-      res.json({ message: "Password reset successfully" });
+      return res.json({ message: "Password reset successfully" });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
     }

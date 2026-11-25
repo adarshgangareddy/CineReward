@@ -20,24 +20,25 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
+  "https://cinereward.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin
-      // (curl, Postman, mobile apps, etc.)
       if (!origin) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (
+        allowedOrigins.includes(origin) ||
+        /^https:\/\/[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.vercel\.app$/.test(origin)
+      ) {
         return callback(null, true);
       }
 
       console.error(`CORS blocked origin: ${origin}`);
-
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
@@ -86,6 +87,17 @@ app.get("/", (req, res) => {
     status: "ok",
     message: "CineReward API is running",
     environment: process.env.NODE_ENV || "development",
+    uptimeSeconds: Math.round(process.uptime()),
+    databaseConnected: mongoose.connection.readyState === 1,
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptimeSeconds: Math.round(process.uptime()),
+    databaseConnected: mongoose.connection.readyState === 1,
+    timestamp: new Date().toISOString(),
   });
 });
 

@@ -99,6 +99,13 @@ router.post(
   requireOwnTeamOrSuperadmin,
   movieTeamController.awardIndividualCoins,
 );
+router.put(
+  "/team/security",
+  authenticate,
+  requireRole("movieteam", "superadmin"),
+  requireOwnTeamOrSuperadmin,
+  movieTeamController.updateSecurity,
+);
 
 // Partner Lead Routes
 const partnerController = require("../controllers/partnerController");

@@ -1,7 +1,23 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Mail, Lock, LogIn, Eye, EyeOff, Shield, Film, User, KeyRound } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  LogIn,
+  Eye,
+  EyeOff,
+  Phone,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import {
+  GoogleAuthProvider,
+  TwitterAuthProvider,
+  GithubAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { auth } from "../firebase";
 import BrandLogo from "../components/BrandLogo";
 import {
   getActiveSession,
@@ -12,13 +28,13 @@ import {
 
 const OAUTH_ERRORS = {
   db_unavailable:
-    "Google sign-in needs MongoDB Atlas connected. Update MONGODB_URI in backend/.env and restart the backend.",
+    "Sign-in requires MongoDB to be connected. Check MONGODB_URI in backend/.env and restart the backend.",
   google_not_configured:
-    "Google OAuth credentials are not configured on the server yet.",
-  oauth_failed: "Google sign-in could not be completed. Please try again.",
+    "Google OAuth credentials are not configured on the backend yet.",
+  oauth_failed: "Social sign-in could not be completed. Please try again.",
   server_config: "Server authentication configuration error.",
-  redirect_failed: "Google sign-in succeeded but failed to redirect.",
-  true: "Google sign-in could not be completed. Please try again.",
+  redirect_failed: "Sign-in succeeded but failed to redirect.",
+  true: "Authentication could not be completed. Please try again.",
 };
 
 const getDashboardForRole = (role) => {
@@ -28,12 +44,13 @@ const getDashboardForRole = (role) => {
 };
 
 const Login = () => {
-  const [roleHint, setRoleHint] = useState("user"); // "user" | "movie_team" | "super_admin"
   const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [secretKey, setSecretKey] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [credential, setCredential] = useState("");
+  const [showCredential, setShowCredential] = useState(false);
+
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("+91");
+  const [phoneName, setPhoneName] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,27 +86,32 @@ const Login = () => {
     }
   }, [location, navigate]);
 
-  const handleLogin = async (e) => {
+  const finishAuthSuccess = (user, token) => {
+    saveRoleSession(user.role || "user", user, token);
+    const fromPath =
+      user.role === "user" ? location.state?.from?.pathname : null;
+    navigate(fromPath || getDashboardForRole(user.role), { replace: true });
+  };
+
+  const handleUnifiedLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
+      const cleanId = identifier.trim();
       const res = await axios.post("/api/auth/login", {
-        identifier: identifier.trim(),
-        password,
-        secretKey: secretKey.trim() || undefined,
+        identifier: cleanId,
+        password: credential,
+        secretKey: credential.trim(),
       });
 
       const { token, user } = res.data;
-      saveRoleSession(user.role, user, token);
-
-      const fromPath =
-        user.role === "user" ? location.state?.from?.pathname : null;
-      navigate(fromPath || getDashboardForRole(user.role), { replace: true });
+      finishAuthSuccess(user, token);
     } catch (err) {
       setError(
-        err.response?.data?.message || "Login failed. Please check your credentials."
+        err.response?.data?.message ||
+          "Sign-in failed. Verify your email, password, or team secret key."
       );
     } finally {
       setLoading(false);
@@ -97,103 +119,98 @@ const Login = () => {
   };
 
   const handleGoogleLogin = () => {
+    setError("");
     const apiBaseURL = getApiBaseURL();
     window.location.href = `${apiBaseURL}/api/auth/google?origin=${encodeURIComponent(
       window.location.origin
     )}`;
   };
 
+  const handleFirebaseSocial = async (providerName) => {
+    setError("");
+    if (!auth) {
+      setError("Firebase authentication is not configured in frontend/.env.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const provider =
+        providerName === "google"
+          ? new GoogleAuthProvider()
+          : providerName === "x"
+            ? new TwitterAuthProvider()
+            : new GithubAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const idToken = await result.user.getIdToken();
+      const res = await axios.post("/api/auth/firebase", { idToken });
+      finishAuthSuccess(res.data.user, res.data.token);
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        (err.code === "auth/operation-not-allowed"
+          ? `${providerName.toUpperCase()} sign-in needs to be enabled in Firebase Authentication -> Sign-in method.`
+          : err.code === "auth/popup-closed-by-user"
+            ? "Sign-in popup was closed."
+            : err.message || "Social sign-in failed.");
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhoneContinue = async (e) => {
+    e.preventDefault();
+    setError("");
+    const cleanPhone = phoneNumber.replace(/\s+/g, "").trim();
+    if (!/^\+?\d{10,15}$/.test(cleanPhone)) {
+      setError("Enter a valid phone number including country code (e.g. +919876543210).");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post("/api/auth/phone", {
+        uid: `phone-${cleanPhone}`,
+        phone: cleanPhone,
+        name: phoneName.trim() || `Viewer ${cleanPhone.slice(-4)}`,
+      });
+      setPhoneModalOpen(false);
+      finishAuthSuccess(res.data.user, res.data.token);
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Phone sign-in requires an active database connection."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-5 pt-6 pb-28 lg:pt-10 lg:pb-16 relative overflow-hidden">
-      <div className="glass-panel rounded-3xl p-6 sm:p-10 w-full max-w-md relative z-10">
-        <div className="text-center mb-7">
+    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 sm:px-5 pt-6 pb-28 lg:pt-10 lg:pb-16 relative overflow-x-clip">
+      <div className="glass-panel rounded-3xl p-6 sm:p-9 w-full max-w-md relative z-10 min-w-0">
+        <div className="text-center mb-6">
           <div className="mb-3 flex justify-center">
             <BrandLogo />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Sign in to CineReward
           </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Automatic role routing for Users, Movie Teams &amp; Admins
+          <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+            One unified portal for <span className="text-slate-200 font-semibold">Users</span>,{" "}
+            <span className="text-slate-200 font-semibold">Movie Teams</span> &amp;{" "}
+            <span className="text-slate-200 font-semibold">Admins</span>
           </p>
         </div>
 
-        {/* Role Selector */}
-        <div className="grid grid-cols-3 gap-1.5 bg-white/[0.05] border border-white/[0.1] p-1 rounded-2xl mb-6">
-          {[
-            { id: "user", label: "User", Icon: User },
-            { id: "movie_team", label: "Movie Team", Icon: Film },
-            { id: "super_admin", label: "Admin", Icon: Shield },
-          ].map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setRoleHint(id)}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-bold transition-all ${
-                roleHint === id
-                  ? "bg-[#e50914] text-white shadow-lg shadow-red-600/25"
-                  : "text-slate-300 hover:text-white"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-
         {error && (
-          <div className="bg-red-500/15 border border-red-500/40 text-red-200 px-4 py-3 rounded-xl mb-5 text-xs font-medium leading-relaxed">
+          <div className="bg-red-500/15 border border-red-500/40 text-red-200 px-4 py-3 rounded-xl mb-5 text-xs font-medium leading-relaxed break-words">
             {error}
           </div>
         )}
 
-        {roleHint === "user" && (
-          <>
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-3 mb-6 shadow-lg text-sm"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.67-.35-1.39-.35-2.09s.13-1.42.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              <span>Continue with Google</span>
-            </button>
-
-            <div className="relative mb-6 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/[0.1]"></div>
-              </div>
-              <span className="relative px-3 bg-[#0e111b] text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                or sign in with credentials
-              </span>
-            </div>
-          </>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleUnifiedLogin} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider pl-1">
-              {roleHint === "movie_team"
-                ? "Team Email or Secret Key"
-                : roleHint === "super_admin"
-                  ? "Admin Email or Username"
-                  : "Email or Username"}
+            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider pl-1 block">
+              Email, Username or Team Key
             </label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -201,13 +218,7 @@ const Login = () => {
                 type="text"
                 autoComplete="username"
                 className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#e50914] transition-all"
-                placeholder={
-                  roleHint === "movie_team"
-                    ? "team@production.com or CR-XXXXXXXX"
-                    : roleHint === "super_admin"
-                      ? "admin@cinereward.com or username"
-                      : "email@example.com or username"
-                }
+                placeholder="you@example.com or admin / team email"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
@@ -216,70 +227,49 @@ const Login = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider pl-1">
-              Password
-            </label>
+            <div className="flex items-center justify-between pl-1 pr-1">
+              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Password or Secret Key
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-[11px] font-semibold text-[#ff2e3b] hover:underline"
+              >
+                Forgot Password / Key?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
-                type={showPassword ? "text" : "password"}
+                type={showCredential ? "text" : "password"}
                 autoComplete="current-password"
                 className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#e50914] transition-all"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password or team secret key"
+                value={credential}
+                onChange={(e) => setCredential(e.target.value)}
                 required
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowCredential(!showCredential)}
+                aria-label={showCredential ? "Hide credential" : "Show credential"}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showCredential ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
 
-          {roleHint === "movie_team" && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider pl-1 flex justify-between">
-                <span>Team Secret Key</span>
-                <span className="text-[10px] font-normal normal-case text-slate-400">
-                  Optional if entered above
-                </span>
-              </label>
-              <div className="relative">
-                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type={showSecretKey ? "text" : "password"}
-                  className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#e50914] transition-all"
-                  placeholder="CR-XXXXXXXX"
-                  value={secretKey}
-                  onChange={(e) => setSecretKey(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSecretKey(!showSecretKey)}
-                  aria-label={showSecretKey ? "Hide secret key" : "Show secret key"}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                >
-                  {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {roleHint === "user" && (
-            <div className="flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="text-xs font-semibold text-slate-400 hover:text-[#ff2e3b] transition-colors"
-              >
-                Forgot Password?
-              </Link>
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>
+              Protected with Argon2d hashing • Movie teams can sign in using their Secret Key in place of a password.
+            </span>
+          </div>
 
           <button
             type="submit"
@@ -287,28 +277,154 @@ const Login = () => {
             className="w-full btn-crimson py-3.5 rounded-xl flex justify-center items-center gap-2 text-sm disabled:opacity-50"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-white/25 border-t-white rounded-full animate-spin"></div>
+              <div className="w-5 h-5 border-2 border-white/25 border-t-white rounded-full animate-spin" />
             ) : (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>
-                  {roleHint === "super_admin"
-                    ? "Open Admin Dashboard"
-                    : roleHint === "movie_team"
-                      ? "Open Movie Team Hub"
-                      : "Sign In"}
-                </span>
+                <span>Sign In</span>
               </>
             )}
           </button>
         </form>
 
-        <p className="mt-7 text-center text-slate-400 text-xs">
-          New to CineReward?{" "}
-          <Link to="/signup" className="text-[#ff2e3b] font-semibold hover:underline">
-            Create an Account
-          </Link>
-        </p>
+        {/* Compact Icon-Only Social Auth Row */}
+        <div className="relative my-6 text-center">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/[0.1]" />
+          </div>
+          <span className="relative px-3 bg-[#0e111b] text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+            or continue with
+          </span>
+        </div>
+
+        <div className="flex items-center justify-center gap-3.5">
+          {/* Google Icon */}
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            title="Continue with Google"
+            aria-label="Continue with Google"
+            className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.67-.35-1.39-.35-2.09s.13-1.42.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              />
+            </svg>
+          </button>
+
+          {/* X (Twitter) Icon */}
+          <button
+            type="button"
+            onClick={() => handleFirebaseSocial("x")}
+            title="Continue with X"
+            aria-label="Continue with X"
+            className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] text-white flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"
+          >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+          </button>
+
+          {/* GitHub Icon */}
+          <button
+            type="button"
+            onClick={() => handleFirebaseSocial("github")}
+            title="Continue with GitHub"
+            aria-label="Continue with GitHub"
+            className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] text-white flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"
+          >
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55v-1.95c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.75 1.18 1.75 1.18 1.02 1.75 2.68 1.24 3.33.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11.02 11.02 0 0 1 5.76 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.39-5.26 5.67.41.36.78 1.06.78 2.13v3.16c0 .31.21.66.79.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+            </svg>
+          </button>
+
+          {/* Phone Quick Sign-In Icon */}
+          <button
+            type="button"
+            onClick={() => setPhoneModalOpen((prev) => !prev)}
+            title="Continue with Phone"
+            aria-label="Continue with Phone"
+            className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] text-emerald-300 flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
+        </div>
+
+        {phoneModalOpen && (
+          <form
+            onSubmit={handlePhoneContinue}
+            className="mt-5 p-4 rounded-2xl bg-white/[0.05] border border-white/[0.12] space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white">
+                Phone Quick Sign-In
+              </span>
+              <button
+                type="button"
+                onClick={() => setPhoneModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Your Name (optional)"
+              value={phoneName}
+              onChange={(e) => setPhoneName(e.target.value)}
+              className="w-full bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e50914]"
+            />
+            <input
+              type="tel"
+              required
+              placeholder="+919876543210"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className="w-full bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#e50914]"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-all"
+            >
+              Continue with Phone
+            </button>
+          </form>
+        )}
+
+        <div className="mt-6 text-center space-y-2">
+          <p className="text-slate-400 text-xs">
+            New to CineReward?{" "}
+            <Link to="/signup" className="text-[#ff2e3b] font-semibold hover:underline">
+              Create an Account
+            </Link>
+          </p>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            By continuing, you agree to our{" "}
+            <Link to="/terms" className="text-slate-300 hover:underline">
+              Terms of Service
+            </Link>{" "}
+            &amp;{" "}
+            <Link to="/privacy-policy" className="text-slate-300 hover:underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        </div>
       </div>
     </div>
   );
