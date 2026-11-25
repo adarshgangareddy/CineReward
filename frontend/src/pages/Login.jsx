@@ -1,18 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
+import { Mail, Lock, LogIn, Eye, EyeOff, Phone, X } from "lucide-react";
 import {
-  Mail,
-  Lock,
-  LogIn,
-  Eye,
-  EyeOff,
-  Phone,
-  ShieldCheck,
-  X,
-} from "lucide-react";
-import {
-  GoogleAuthProvider,
   TwitterAuthProvider,
   GithubAuthProvider,
   signInWithPopup,
@@ -135,11 +125,9 @@ const Login = () => {
     setLoading(true);
     try {
       const provider =
-        providerName === "google"
-          ? new GoogleAuthProvider()
-          : providerName === "x"
-            ? new TwitterAuthProvider()
-            : new GithubAuthProvider();
+        providerName === "x"
+          ? new TwitterAuthProvider()
+          : new GithubAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
       const res = await axios.post("/api/auth/firebase", { idToken });
@@ -163,7 +151,9 @@ const Login = () => {
     setError("");
     const cleanPhone = phoneNumber.replace(/\s+/g, "").trim();
     if (!/^\+?\d{10,15}$/.test(cleanPhone)) {
-      setError("Enter a valid phone number including country code (e.g. +919876543210).");
+      setError(
+        "Enter a valid phone number including country code (e.g. +919876543210)."
+      );
       return;
     }
     setLoading(true);
@@ -177,7 +167,8 @@ const Login = () => {
       finishAuthSuccess(res.data.user, res.data.token);
     } catch (err) {
       setError(
-        err.response?.data?.message || "Phone sign-in requires an active database connection."
+        err.response?.data?.message ||
+          "Phone sign-in requires an active database connection."
       );
     } finally {
       setLoading(false);
@@ -185,7 +176,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 sm:px-5 pt-6 pb-28 lg:pt-10 lg:pb-16 relative overflow-x-clip">
+    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 sm:px-5 pt-6 pb-32 lg:pt-10 lg:pb-16 relative overflow-x-clip">
       <div className="glass-panel rounded-3xl p-6 sm:p-9 w-full max-w-md relative z-10 min-w-0">
         <div className="text-center mb-6">
           <div className="mb-3 flex justify-center">
@@ -195,7 +186,8 @@ const Login = () => {
             Sign in to CineReward
           </h1>
           <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
-            One unified portal for <span className="text-slate-200 font-semibold">Users</span>,{" "}
+            One unified portal for{" "}
+            <span className="text-slate-200 font-semibold">Users</span>,{" "}
             <span className="text-slate-200 font-semibold">Movie Teams</span> &amp;{" "}
             <span className="text-slate-200 font-semibold">Admins</span>
           </p>
@@ -207,68 +199,54 @@ const Login = () => {
           </div>
         )}
 
-        <form onSubmit={handleUnifiedLogin} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider pl-1 block">
-              Email, Username or Team Key
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                autoComplete="username"
-                className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#e50914] transition-all"
-                placeholder="you@example.com or admin / team email"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-              />
-            </div>
+        <form onSubmit={handleUnifiedLogin} className="space-y-3.5">
+          <div className="relative">
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              aria-label="Email, Username or Secret Key"
+              autoComplete="username"
+              className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-[#e50914] transition-all"
+              placeholder="Email, Username or Secret Key"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+            />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between pl-1 pr-1">
-              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Password or Secret Key
-              </label>
-              <Link
-                to="/forgot-password"
-                className="text-[11px] font-semibold text-[#ff2e3b] hover:underline"
-              >
-                Forgot Password / Key?
-              </Link>
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type={showCredential ? "text" : "password"}
-                autoComplete="current-password"
-                className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#e50914] transition-all"
-                placeholder="Enter password or team secret key"
-                value={credential}
-                onChange={(e) => setCredential(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowCredential(!showCredential)}
-                aria-label={showCredential ? "Hide credential" : "Show credential"}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-              >
-                {showCredential ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type={showCredential ? "text" : "password"}
+              aria-label="Password or Secret Key"
+              autoComplete="current-password"
+              className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-[#e50914] transition-all"
+              placeholder="Password or Team Secret Key"
+              value={credential}
+              onChange={(e) => setCredential(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowCredential(!showCredential)}
+              aria-label={showCredential ? "Hide credential" : "Show credential"}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              {showCredential ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>
-              Protected with Argon2d hashing • Movie teams can sign in using their Secret Key in place of a password.
-            </span>
+          <div className="flex justify-end pt-0.5">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-semibold text-slate-300 hover:text-[#ff2e3b] transition-colors"
+            >
+              Forgot Password?
+            </Link>
           </div>
 
           <button
@@ -326,7 +304,7 @@ const Login = () => {
             </svg>
           </button>
 
-          {/* X (Twitter) Icon */}
+          {/* X Icon */}
           <button
             type="button"
             onClick={() => handleFirebaseSocial("x")}

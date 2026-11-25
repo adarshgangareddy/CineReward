@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getActiveSession, saveRoleSession } from "../utils/auth";
 import LoadingSpinner from "../components/LoadingSpinner";
+import WhiteTicketCard from "../components/WhiteTicketCard";
 
 const UserDashboard = () => {
   const [session] = useState(() => getActiveSession());
@@ -319,67 +320,42 @@ const UserDashboard = () => {
         </div>
       </div>
 
-      {/* M-Ticket Boarding Pass Modal */}
+      {/* White M-Ticket Boarding Pass Modal with QR Scanner */}
       {selectedPass && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
-          <div className="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-7 space-y-5">
-            <div className="flex justify-between items-start gap-4 border-b border-white/10 pb-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold">
-                  CineReward Digital M-Ticket
-                </p>
-                <h3 className="text-xl font-extrabold text-white mt-1">
-                  {selectedPass.movieTitle || "Cinema Ticket"}
-                </h3>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  {selectedPass.theatre}
-                </p>
-              </div>
-              <span className="px-2.5 py-1 rounded-full bg-white/[0.08] text-[10px] font-mono text-white">
-                #{selectedPass._id.slice(-8).toUpperCase()}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-white/[0.04] rounded-xl p-3 border border-white/[0.08]">
-                <span className="text-slate-400 block text-[10px] uppercase">Date &amp; Time</span>
-                <span className="text-white font-bold mt-0.5 block">
-                  {selectedPass.date} • {selectedPass.time}
-                </span>
-              </div>
-              <div className="bg-white/[0.04] rounded-xl p-3 border border-white/[0.08]">
-                <span className="text-slate-400 block text-[10px] uppercase">Seats</span>
-                <span className="text-white font-bold mt-0.5 block">
-                  {selectedPass.seatNumber}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-3 flex items-center justify-center gap-[3px]">
-              {Array.from({ length: 30 }, (_, i) => (
-                <span
-                  key={i}
-                  className="bg-slate-950 h-9 inline-block"
-                  style={{ width: i % 3 === 0 ? "3px" : i % 2 === 0 ? "2px" : "1px" }}
-                />
-              ))}
-            </div>
-            <p className="text-center text-[11px] text-slate-400">
-              Present this M-Ticket at {selectedPass.theatre}. Arrive 20 mins before showtime.
-            </p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl overflow-y-auto"
+          onClick={() => setSelectedPass(null)}
+        >
+          <div
+            className="w-full max-w-lg space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <WhiteTicketCard
+              bookingId={selectedPass._id}
+              movieTitle={selectedPass.movieTitle}
+              languageFormat={selectedPass.languageFormat}
+              theatre={selectedPass.theatre}
+              city={selectedPass.city}
+              date={selectedPass.date}
+              time={selectedPass.time}
+              seats={selectedPass.seatNumber}
+              snacksSummary={selectedPass.snacksSummary}
+              totalPaid={selectedPass.price}
+              paymentMethod={selectedPass.paymentMethod || "Razorpay"}
+            />
 
             <div className="flex gap-3 print:hidden">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex-1 glass-button py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                className="flex-1 bg-white hover:bg-slate-100 text-slate-950 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg"
               >
-                <Printer className="w-3.5 h-3.5" /> Print Pass
+                <Printer className="w-4 h-4" /> Print White Pass
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedPass(null)}
-                className="flex-1 btn-crimson py-2.5 rounded-xl text-xs font-bold"
+                className="flex-1 btn-crimson py-3 rounded-xl text-xs font-bold"
               >
                 Close
               </button>

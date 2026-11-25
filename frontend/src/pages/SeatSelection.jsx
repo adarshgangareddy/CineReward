@@ -8,7 +8,6 @@ import {
   Coins,
   ArrowLeft,
   Printer,
-  CheckCircle2,
   ShieldCheck,
   Sparkles,
   Film,
@@ -32,6 +31,7 @@ import { getCached, setCached } from "../utils/cache";
 import { setActiveBackdrop } from "../utils/backdrop";
 import { resolveMoviePoster } from "../utils/media";
 import LoadingSpinner from "../components/LoadingSpinner";
+import WhiteTicketCard from "../components/WhiteTicketCard";
 
 const ROWS = ["A", "B", "C", "D", "E", "F", "G"];
 const COLS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -160,21 +160,22 @@ const getOccupiedSeats = (seedKey) => {
   return booked;
 };
 
-const TicketBarcode = ({ code }) => {
-  const seed = hashSeed(String(code || "CINEREWARD"));
-  const bars = Array.from({ length: 28 }, (_, i) => ((seed >> (i % 16)) & 1 ? 3 : 1));
-  return (
-    <div className="flex items-stretch justify-center gap-[2px] h-10 bg-white px-3 py-1.5 rounded-lg">
-      {bars.map((w, i) => (
-        <span
-          key={i}
-          className="bg-slate-950 inline-block h-full"
-          style={{ width: `${w}px` }}
-        />
-      ))}
-    </div>
-  );
-};
+const ensureRazorpayLoaded = () =>
+  new Promise((resolve) => {
+    if (typeof window.Razorpay === "function") return resolve(true);
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(typeof window.Razorpay === "function"));
+      setTimeout(() => resolve(typeof window.Razorpay === "function"), 2500);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 
 const SeatSelection = () => {
   const { id } = useParams();
@@ -506,6 +507,45 @@ const SeatSelection = () => {
     });
   };
 
+  const finalizeTicketBooking = async (bookingPayload) => {
+    const res = await axios.post("/api/tickets/book", bookingPayload);
+
+    const coinsEarned =
+      res.data?.coinsEarned ?? Math.max(25, selectedSeats.length * 25);
+    setUserCoins(
+      Math.max(0, userCoins - pricingSummary.coinsToApply + coinsEarned)
+    );
+
+    setConfirmation({
+      bookingId:
+        res.data?.ticket?._id?.slice(-8)?.toUpperCase() ||
+        res.data?._id?.slice(-8)?.toUpperCase() ||
+        `CR${Date.now().toString().slice(-6)}`,
+      movieTitle: bookingPayload.movieTitle,
+      poster: movie?.poster_path
+        ? resolveMoviePoster(movie.poster_path, movie.id)
+        : null,
+      languageFormat: bookingPayload.languageFormat,
+      theatre: selectedTheatre.name,
+      area: selectedTheatre.area,
+      city: selectedTheatre.city,
+      screen: selectedSlot.screen,
+      date: `${selectedDayObj.dayLabel}, ${selectedDayObj.dateNum} ${selectedDayObj.month}`,
+      time: selectedSlot.time,
+      seats: [...selectedSeats],
+      ticketSubtotal: pricingSummary.ticketSubtotal,
+      snacksTotal: pricingSummary.snacksTotal,
+      snacksSummary: snacksSummary.summaryText,
+      fee: pricingSummary.fee,
+      totalPaid: pricingSummary.finalTotal,
+      paymentMethod: bookingPayload.paymentMethod,
+      coinsUsed: pricingSummary.coinsToApply,
+      coinsEarned,
+    });
+    setStep("confirmed");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleConfirmBooking = async () => {
     setError("");
     if (!selectedTheatre || !selectedSlot || selectedSeats.length === 0) {
@@ -526,8 +566,9 @@ const SeatSelection = () => {
     setBookingLoading(true);
     const userId = sessionUser.id || sessionUser._id;
     const methodLabel =
-      PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label ||
-      "Online Payment";
+      pricingSummary.finalTotal === 0
+        ? "CineCoins"
+        : PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label || "Razorpay";
 
     const bookingPayload = {
       userId,
@@ -548,87 +589,85 @@ const SeatSelection = () => {
     };
 
     try {
-      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (pricingSummary.finalTotal > 0 && razorpayKey && window.Razorpay) {
+      if (pricingSummary.finalTotal > 0) {
+        const sdkReady = await ensureRazorpayLoaded();
         const orderRes = await axios.post("/api/tickets/create-order", {
           amount: pricingSummary.finalTotal,
           receipt: `cr_${id}_${Date.now()}`,
         });
 
         const { id: orderId, amount, currency, keyId } = orderRes.data;
-        if (orderId && !String(orderId).startsWith("order_mock")) {
-          const paid = await new Promise((resolve, reject) => {
-            const rzp = new window.Razorpay({
-              key: keyId || razorpayKey,
-              amount,
-              currency: currency || "INR",
-              name: "CineReward",
-              description: `${movie?.title || "Movie Ticket"} — ${selectedTheatre.shortName}`,
-              order_id: orderId,
-              handler: async (response) => {
-                try {
-                  await axios.post("/api/tickets/verify-payment", response);
-                  resolve(true);
-                } catch (verifyErr) {
-                  reject(verifyErr);
-                }
-              },
-              modal: { ondismiss: () => resolve(false) },
-              theme: { color: "#e50914" },
-            });
-            rzp.open();
-          });
-
-          if (!paid) {
-            setBookingLoading(false);
-            return;
-          }
+        if (!keyId || !sdkReady || typeof window.Razorpay !== "function") {
+          throw new Error(
+            "Razorpay gateway could not be initialized. Check backend RAZORPAY_KEY_ID or disable extensions blocking checkout.razorpay.com."
+          );
         }
+
+        const rzp = new window.Razorpay({
+          key: keyId,
+          amount,
+          currency: currency || "INR",
+          name: "CineReward",
+          description: `${movie?.title || "Movie Ticket"} — ${selectedTheatre.shortName}`,
+          order_id: orderId,
+          handler: async (response) => {
+            try {
+              setBookingLoading(true);
+              const verifyRes = await axios.post("/api/tickets/verify-payment", {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              if (verifyRes.data?.status && verifyRes.data.status !== "success") {
+                throw new Error("Payment signature verification failed.");
+              }
+              await finalizeTicketBooking({
+                ...bookingPayload,
+                paymentMethod: `Razorpay (${methodLabel})`,
+              });
+            } catch (err) {
+              setError(
+                err.response?.data?.message ||
+                  err.message ||
+                  "Payment verification failed."
+              );
+            } finally {
+              setBookingLoading(false);
+            }
+          },
+          modal: {
+            ondismiss: () => setBookingLoading(false),
+          },
+          prefill: {
+            name: sessionUser?.name || "",
+            email: contactEmail || sessionUser?.email || "",
+            contact: contactPhone || sessionUser?.phone || "",
+          },
+          theme: { color: "#e50914" },
+        });
+
+        rzp.on("payment.failed", (resp) => {
+          setBookingLoading(false);
+          setError(
+            resp.error?.description ||
+              "Razorpay payment could not be completed."
+          );
+        });
+
+        rzp.open();
+        return;
       }
 
-      const res = await axios.post("/api/tickets/book", bookingPayload);
-
-      const coinsEarned =
-        res.data?.coinsEarned ?? Math.max(25, selectedSeats.length * 25);
-      setUserCoins(
-        Math.max(0, userCoins - pricingSummary.coinsToApply + coinsEarned)
-      );
-
-      setConfirmation({
-        bookingId:
-          res.data?.ticket?._id?.slice(-8)?.toUpperCase() ||
-          res.data?._id?.slice(-8)?.toUpperCase() ||
-          `CR${Date.now().toString().slice(-6)}`,
-        movieTitle: bookingPayload.movieTitle,
-        poster: movie?.poster_path
-          ? resolveMoviePoster(movie.poster_path, movie.id)
-          : null,
-        languageFormat: bookingPayload.languageFormat,
-        theatre: selectedTheatre.name,
-        area: selectedTheatre.area,
-        city: selectedTheatre.city,
-        screen: selectedSlot.screen,
-        date: `${selectedDayObj.dayLabel}, ${selectedDayObj.dateNum} ${selectedDayObj.month}`,
-        time: selectedSlot.time,
-        seats: [...selectedSeats],
-        ticketSubtotal: pricingSummary.ticketSubtotal,
-        snacksTotal: pricingSummary.snacksTotal,
-        snacksSummary: snacksSummary.summaryText,
-        fee: pricingSummary.fee,
-        totalPaid: pricingSummary.finalTotal,
-        paymentMethod: methodLabel,
-        coinsUsed: pricingSummary.coinsToApply,
-        coinsEarned,
-      });
-      setStep("confirmed");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await finalizeTicketBooking(bookingPayload);
+      setBookingLoading(false);
     } catch (err) {
       setError(
-        err.response?.data?.error ||
+        err.response?.data?.details ||
+          err.response?.data?.error ||
           err.response?.data?.message ||
-          "Booking failed. Verify database connection in backend/.env and retry."
+          err.message ||
+          "Booking failed. Verify backend Razorpay & MongoDB configuration."
       );
-    } finally {
       setBookingLoading(false);
     }
   };
@@ -636,126 +675,24 @@ const SeatSelection = () => {
   if (step === "confirmed" && confirmation) {
     return (
       <div className="min-h-[calc(100vh-5rem)] pt-6 pb-28 lg:pt-8 lg:pb-16 px-4 sm:px-5">
-        <div className="max-w-xl mx-auto">
-          <div className="bg-[#0e111b]/90 backdrop-blur-2xl border border-white/[0.15] rounded-3xl overflow-hidden shadow-2xl">
-            <div className="p-5 sm:p-7 bg-gradient-to-br from-[#e50914]/25 via-[#0e111b] to-[#0e111b] border-b border-white/10">
-              <div className="flex items-start gap-4">
-                {confirmation.poster && (
-                  <img
-                    src={confirmation.poster}
-                    alt={confirmation.movieTitle}
-                    className="w-16 h-24 rounded-xl object-cover border border-white/15 shrink-0"
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-emerald-400 font-bold mb-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    M-Ticket Confirmed
-                  </div>
-                  <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight break-words">
-                    {confirmation.movieTitle}
-                  </h1>
-                  <p className="text-xs text-slate-300 mt-1">
-                    {confirmation.languageFormat}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 sm:p-7 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="bg-white/[0.04] rounded-2xl p-4 border border-white/[0.08]">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    Venue &amp; Screen
-                  </p>
-                  <p className="text-sm font-bold text-white mt-1 break-words">
-                    {confirmation.theatre}
-                  </p>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {confirmation.area}, {confirmation.city} • {confirmation.screen}
-                  </p>
-                </div>
-
-                <div className="bg-white/[0.04] rounded-2xl p-4 border border-white/[0.08]">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    Show Date &amp; Time
-                  </p>
-                  <p className="text-sm font-bold text-white mt-1">
-                    {confirmation.date}
-                  </p>
-                  <p className="text-xs text-emerald-400 font-semibold mt-0.5">
-                    {confirmation.time} • Arrive 20 mins early
-                  </p>
-                </div>
-
-                <div className="bg-white/[0.04] rounded-2xl p-4 border border-white/[0.08]">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    Seats ({confirmation.seats.length})
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {confirmation.seats.map((s) => (
-                      <span
-                        key={s}
-                        className="px-2.5 py-0.5 rounded-lg bg-[#e50914]/25 border border-[#e50914]/50 text-xs font-bold text-white"
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                  {confirmation.snacksSummary && (
-                    <p className="text-[11px] text-amber-300 mt-2">
-                      F&amp;B: {confirmation.snacksSummary}
-                    </p>
-                  )}
-                </div>
-
-                <div className="bg-white/[0.04] rounded-2xl p-4 border border-white/[0.08] space-y-1">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    Payment Summary ({confirmation.paymentMethod})
-                  </p>
-                  <p className="text-xs text-slate-300">
-                    Tickets ₹{confirmation.ticketSubtotal}
-                    {confirmation.snacksTotal > 0 ? ` + Snacks ₹${confirmation.snacksTotal}` : ""}
-                    {` + Fee ₹${confirmation.fee}`}
-                  </p>
-                  <p className="text-lg font-extrabold text-white">
-                    Paid: ₹{confirmation.totalPaid}
-                  </p>
-                  <p className="text-[11px] text-amber-300 font-semibold">
-                    +{confirmation.coinsEarned} CineCoins credited
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t border-dashed border-white/20 pt-5 flex flex-col items-center gap-2.5">
-                <TicketBarcode code={confirmation.bookingId} />
-                <p className="font-mono text-xs font-bold tracking-[0.22em] text-slate-200">
-                  M-TICKET ID: #{confirmation.bookingId}
-                </p>
-                <p className="text-[11px] text-slate-400 text-center">
-                  Show this M-Ticket barcode at {confirmation.theatre}. Confirmation email sent.
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-1 print:hidden">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 text-xs font-bold text-white transition-all"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print M-Ticket
-                </button>
-                <Link
-                  to="/dashboard"
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#e50914] hover:bg-red-700 text-xs font-bold text-white shadow-lg shadow-red-900/30 transition-all"
-                >
-                  Open My Tickets &amp; Coins
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
+        <div className="max-w-xl mx-auto space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+            <Link
+              to="/dashboard"
+              className="glass-button px-4 py-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-4 h-4" /> My Tickets &amp; Dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="btn-crimson px-5 py-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-2"
+            >
+              <Printer className="w-4 h-4" /> Print / Save White Pass
+            </button>
           </div>
+
+          <WhiteTicketCard {...confirmation} />
         </div>
       </div>
     );
@@ -1495,8 +1432,10 @@ const SeatSelection = () => {
                 <ShieldCheck className="w-4 h-4" />
                 <span>
                   {bookingLoading
-                    ? "Processing Payment..."
-                    : `Pay ₹${pricingSummary.finalTotal}.00 & Confirm`}
+                    ? "Opening Razorpay..."
+                    : pricingSummary.finalTotal === 0
+                      ? "Confirm Booking with Coins"
+                      : `Pay ₹${pricingSummary.finalTotal}.00 via Razorpay`}
                 </span>
               </button>
             </div>
