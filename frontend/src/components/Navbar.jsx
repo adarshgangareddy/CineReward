@@ -21,27 +21,35 @@ import { clearAllSessions, safeParseJSON } from "../utils/auth";
 import { getWatchlist } from "../utils/watchlist";
 
 const GENRES = [
-  { label: "Action", value: "28" },
-  { label: "Sci-Fi", value: "878" },
-  { label: "Drama", value: "18" },
-  { label: "Thriller", value: "53" },
-  { label: "Comedy", value: "35" },
-  { label: "Horror", value: "27" },
-  { label: "Romance", value: "10749" },
-  { label: "Animation", value: "16" },
-  { label: "Adventure", value: "12" },
-  { label: "Crime", value: "80" },
+  { label: "Action", to: "/catalog?genre=28" },
+  { label: "Adventure", to: "/catalog?genre=12" },
+  { label: "Animation", to: "/catalog?genre=16" },
+  { label: "Crime", to: "/catalog?genre=80" },
+  { label: "Comedy", to: "/catalog?genre=35" },
+  { label: "Documentary", to: "/catalog?genre=99" },
+  { label: "Drama", to: "/catalog?genre=18" },
+  { label: "Fantasy", to: "/catalog?genre=14" },
+  { label: "Family", to: "/catalog?genre=10751" },
+  { label: "Horror", to: "/catalog?genre=27" },
+  { label: "Mystery", to: "/catalog?genre=9648" },
+  { label: "Romance", to: "/catalog?genre=10749" },
+  { label: "Sci-Fi", to: "/catalog?genre=878" },
+  { label: "Thriller", to: "/catalog?genre=53" },
+  { label: "History", to: "/catalog?genre=36" },
+  { label: "War", to: "/catalog?genre=10752" },
 ];
 
 const CATEGORIES = [
-  { label: "Featured Selections", to: "/catalog?section=featured" },
-  { label: "Now Playing in Theatres", to: "/catalog?section=now-playing" },
+  { label: "Top Rated", to: "/catalog?section=top-rated" },
   { label: "Bollywood Movies", to: "/catalog?section=bollywood" },
-  { label: "Hollywood Movies", to: "/catalog?section=hollywood" },
-  { label: "South Indian Hits", to: "/catalog?section=south-indian" },
-  { label: "Web Series & Shows", to: "/catalog?section=shows" },
+  { label: "Hollywood", to: "/catalog?section=hollywood" },
+  { label: "South Indian", to: "/catalog?section=south-indian" },
+  { label: "Now Playing", to: "/catalog?section=now-playing" },
+  { label: "Upcoming", to: "/catalog?section=upcoming" },
+  { label: "TV & Web Series", to: "/catalog?section=shows" },
   { label: "Anime & Ghibli", to: "/catalog?section=anime" },
   { label: "Korean Cinema", to: "/catalog?section=korean" },
+  { label: "Featured", to: "/catalog?section=featured" },
 ];
 
 const OTT_ITEMS = [
@@ -52,21 +60,36 @@ const OTT_ITEMS = [
 ];
 
 const COLLECTION_ITEMS = [
-  { label: "Explore All Collections", to: "/collections" },
   { label: "Marvel Collection", to: "/collection/marvel-collection" },
   { label: "DC Universe", to: "/collection/dc-universe" },
-  { label: "Fast & Furious Franchise", to: "/collection/fast-and-furious" },
+  { label: "Fast and Furious", to: "/collection/fast-and-furious" },
+  { label: "Harry Potter / Wizarding", to: "/collection/harry-potter-wizarding" },
+  { label: "John Wick Saga", to: "/collection/john-wick-saga" },
+  { label: "Mission: Impossible", to: "/collection/mission-impossible" },
+  { label: "Pirates of the Caribbean", to: "/collection/pirates-of-the-caribbean" },
+  { label: "Star Wars Universe", to: "/collection/star-wars-universe" },
   { label: "Studio Ghibli Classics", to: "/collection/studio-ghibli" },
   { label: "Indian Blockbusters", to: "/collection/indian-blockbusters" },
-  { label: "John Wick Saga", to: "/collection/john-wick-saga" },
+  { label: "Sci-Fi Epics", to: "/collection/sci-fi-epics" },
+  { label: "All collections", to: "/collections" },
 ];
 
 const REWARDS_ITEMS = [
   { label: "My Tickets & Coins", to: "/dashboard" },
   { label: "My Watchlist", to: "/watchlist" },
-  { label: "List Your Show (Partner)", to: "/list-your-show" },
-  { label: "Track Partner Inquiry", to: "/partner-status" },
+  { label: "List Your Show", to: "/list-your-show" },
+  { label: "Track Inquiry", to: "/partner-status" },
   { label: "About CineReward", to: "/about" },
+  { label: "Movie Team Portal", to: "/team/login" },
+  { label: "Admin Portal", to: "/super-admin-login" },
+];
+
+const DROPDOWN_MENUS = [
+  { key: "genre", label: "Genre", subtitle: "Find your next favourite", items: GENRES },
+  { key: "category", label: "Category", subtitle: "Browse curated cinema categories", items: CATEGORIES },
+  { key: "ott", label: "OTT", subtitle: "Streaming platforms & networks", items: OTT_ITEMS },
+  { key: "collection", label: "Collection", subtitle: "Find your next favourite universe", items: COLLECTION_ITEMS },
+  { key: "rewards", label: "Rewards", subtitle: "Tickets, coins & CineReward hubs", items: REWARDS_ITEMS },
 ];
 
 const CITIES = [
@@ -175,17 +198,7 @@ const Navbar = () => {
     navigate("/login");
   };
 
-  const dropdownMenus = [
-    {
-      key: "genre",
-      label: "Genre",
-      items: GENRES.map((g) => ({ label: g.label, to: `/catalog?genre=${g.value}` })),
-    },
-    { key: "category", label: "Category", items: CATEGORIES },
-    { key: "ott", label: "OTT", items: OTT_ITEMS },
-    { key: "collections", label: "Collection", items: COLLECTION_ITEMS },
-    { key: "rewards", label: "Rewards", items: REWARDS_ITEMS },
-  ];
+  const activeMenu = DROPDOWN_MENUS.find((m) => m.key === openDropdown);
 
   return (
     <>
@@ -193,12 +206,12 @@ const Navbar = () => {
         ref={navRef}
         className={`sticky top-0 z-50 transition-all duration-300 ${
           scrolled
-            ? "bg-[#09090d]/85 backdrop-blur-2xl border-b border-white/[0.07] shadow-[0_10px_40px_rgba(0,0,0,0.65)]"
-            : "bg-gradient-to-b from-[#09090d]/95 via-[#09090d]/70 to-transparent"
+            ? "bg-[#07080d]/75 backdrop-blur-2xl border-b border-white/[0.08] shadow-[0_10px_40px_rgba(0,0,0,0.65)]"
+            : "bg-gradient-to-b from-black/75 via-black/35 to-transparent"
         }`}
       >
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-          {/* Brand Logo matching MultiMovies dual-box style */}
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4 relative">
+          {/* Brand Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0 group">
             <div className="flex items-stretch font-black tracking-tighter text-lg sm:text-xl leading-none shadow-lg">
               <span className="bg-[#e50914] text-white px-2 py-1 rounded-l-md uppercase">
@@ -209,36 +222,37 @@ const Navbar = () => {
               </span>
             </div>
             {isLibraryPage && (
-              <span className="hidden xl:inline-block text-[9px] font-bold tracking-[0.22em] text-slate-400 uppercase self-end pb-0.5">
+              <span className="hidden xl:inline-block text-[9px] font-bold tracking-[0.22em] text-slate-300 uppercase self-end pb-0.5">
                 LIBRARY
               </span>
             )}
           </Link>
 
-          {/* Center Floating Glassmorphic Pill Nav */}
-          <nav className="hidden lg:flex items-center gap-1 bg-white/[0.06] backdrop-blur-2xl border border-white/[0.11] rounded-full px-2 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
-            <Link
-              to="/"
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                location.pathname === "/"
-                  ? "bg-white/[0.16] text-white shadow-inner"
-                  : "text-slate-300 hover:text-white hover:bg-white/[0.06]"
-              }`}
-            >
-              Home
-            </Link>
+          {/* Center Floating Glassmorphic Pill Nav + Wide Mega-Menu Anchor */}
+          <div className="hidden lg:flex flex-col items-center relative">
+            <nav className="flex items-center gap-1 bg-white/[0.07] backdrop-blur-2xl border border-white/[0.14] rounded-full px-2 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.5)]">
+              <Link
+                to="/"
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  location.pathname === "/"
+                    ? "bg-white/[0.18] text-white shadow-inner"
+                    : "text-slate-200 hover:text-white hover:bg-white/[0.08]"
+                }`}
+              >
+                Home
+              </Link>
 
-            {dropdownMenus.map((menu) => {
-              const isOpen = openDropdown === menu.key;
-              return (
-                <div key={menu.key} className="relative">
+              {DROPDOWN_MENUS.map((menu) => {
+                const isOpen = openDropdown === menu.key;
+                return (
                   <button
+                    key={menu.key}
                     type="button"
                     onClick={() => setOpenDropdown(isOpen ? null : menu.key)}
                     className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       isOpen
-                        ? "bg-white/[0.14] text-white"
-                        : "text-slate-300 hover:text-white hover:bg-white/[0.06]"
+                        ? "bg-white/[0.16] text-white"
+                        : "text-slate-200 hover:text-white hover:bg-white/[0.08]"
                     }`}
                   >
                     <span>{menu.label}</span>
@@ -248,45 +262,55 @@ const Navbar = () => {
                       }`}
                     />
                   </button>
+                );
+              })}
+            </nav>
 
-                  {isOpen && (
-                    <div className="absolute left-0 top-12 w-56 bg-[#111119]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-[0_24px_60px_rgba(0,0,0,0.85)] z-50">
-                      {menu.items.map((item) => (
-                        <Link
-                          key={item.to + item.label}
-                          to={item.to}
-                          onClick={() => setOpenDropdown(null)}
-                          className="block px-3.5 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
+            {/* Wide Frosted Glass 4-Column Mega-Menu (Matching Screenshots 2, 3, 4) */}
+            {activeMenu && (
+              <div className="absolute top-14 left-1/2 -translate-x-1/2 w-[660px] max-w-[92vw] bg-[#10131e]/90 backdrop-blur-3xl border border-white/[0.15] rounded-2xl p-6 shadow-[0_32px_90px_rgba(0,0,0,0.85)] z-50">
+                <div className="mb-4">
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    {activeMenu.label}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {activeMenu.subtitle}
+                  </p>
                 </div>
-              );
-            })}
-          </nav>
+
+                <div className="grid grid-cols-4 gap-x-6 gap-y-2.5">
+                  {activeMenu.items.map((item) => (
+                    <Link
+                      key={item.to + item.label}
+                      to={item.to}
+                      onClick={() => setOpenDropdown(null)}
+                      className="text-xs font-medium text-slate-200 hover:text-white hover:translate-x-0.5 transition-all py-1 truncate"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Right Action Cluster */}
           <div className="flex items-center gap-2.5 shrink-0">
-            {/* Search Modal Trigger */}
             <button
               type="button"
               onClick={() => setIsSearchOpen(true)}
               aria-label="Search movies and shows"
               title="Search movies, series & collections"
-              className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.1] flex items-center justify-center text-slate-200 transition-all"
+              className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] flex items-center justify-center text-white transition-all"
             >
               <Search className="w-4 h-4" />
             </button>
 
-            {/* Watchlist Bookmark Trigger */}
             <Link
               to="/watchlist"
               aria-label="My Watchlist"
               title="My Watchlist"
-              className="relative w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.1] flex items-center justify-center text-slate-200 transition-all"
+              className="relative w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] flex items-center justify-center text-white transition-all"
             >
               <Bookmark className="w-4 h-4" />
               {watchlistCount > 0 && (
@@ -296,32 +320,29 @@ const Navbar = () => {
               )}
             </Link>
 
-            {/* Catalog / Filter Shortcut */}
             <Link
               to="/catalog"
               aria-label="Explore full catalog"
               title="Explore Catalog & Filters"
-              className="hidden sm:flex w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.1] items-center justify-center text-slate-200 transition-all"
+              className="hidden sm:flex w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] items-center justify-center text-white transition-all"
             >
               <SlidersHorizontal className="w-4 h-4" />
             </Link>
 
-            {/* City Selector Pill */}
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(true)}
-              className="hidden md:flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] rounded-full px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-all"
+              className="hidden md:flex items-center gap-1.5 bg-white/[0.07] hover:bg-white/[0.14] backdrop-blur-xl border border-white/[0.12] rounded-full px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white transition-all"
             >
               <MapPin className="w-3.5 h-3.5 text-[#ff2e3b]" />
               <span>{selectedCity}</span>
             </button>
 
-            {/* Role / Auth Section */}
             {user ? (
               <div className="flex items-center gap-2">
                 <Link
                   to="/dashboard"
-                  className="hidden sm:flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-full text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+                  className="hidden sm:flex items-center gap-1.5 bg-amber-500/15 backdrop-blur-xl border border-amber-400/30 px-3 py-1.5 rounded-full text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-all"
                 >
                   <Coins className="w-3.5 h-3.5 text-amber-400" />
                   <span>{user.coins || 0}</span>
@@ -332,7 +353,7 @@ const Navbar = () => {
                     type="button"
                     onClick={() => setIsAccountOpen(!isAccountOpen)}
                     aria-expanded={isAccountOpen}
-                    className="flex items-center gap-2 bg-white/[0.07] hover:bg-white/[0.14] border border-white/[0.12] rounded-full pl-1.5 pr-3 py-1 transition-all"
+                    className="flex items-center gap-2 bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.14] rounded-full pl-1.5 pr-3 py-1 transition-all"
                   >
                     {user.profilePicture ? (
                       <img
@@ -348,11 +369,11 @@ const Navbar = () => {
                     <span className="hidden xl:inline text-xs font-semibold text-white max-w-[90px] truncate">
                       {user.name}
                     </span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
                   </button>
 
                   {isAccountOpen && (
-                    <div className="absolute right-0 top-12 w-56 bg-[#111119]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-2xl z-50">
+                    <div className="absolute right-0 top-12 w-56 glass-panel rounded-2xl p-2 z-50">
                       <div className="px-3 py-2 border-b border-white/[0.08] mb-1">
                         <p className="text-xs font-bold text-white truncate">{user.name}</p>
                         <p className="text-[11px] text-slate-400 truncate">
@@ -364,7 +385,7 @@ const Navbar = () => {
                         className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-white/[0.08] text-xs font-medium text-slate-200"
                       >
                         <Ticket className="w-3.5 h-3.5 text-[#ff2e3b]" />
-                        My Tickets & Coins
+                        My Tickets &amp; Coins
                       </Link>
                       <Link
                         to="/watchlist"
@@ -396,7 +417,7 @@ const Navbar = () => {
               <div className="flex items-center gap-2">
                 <Link
                   to="/team/dashboard"
-                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#e50914]/20 border border-[#e50914]/40 px-3.5 py-1.5 rounded-full hover:bg-[#e50914]/30 transition-all"
+                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#e50914]/25 backdrop-blur-xl border border-[#e50914]/45 px-3.5 py-1.5 rounded-full hover:bg-[#e50914]/35 transition-all"
                 >
                   <Film className="w-3.5 h-3.5 text-[#ff2e3b]" />
                   <span>Team Hub</span>
@@ -405,7 +426,7 @@ const Navbar = () => {
                   type="button"
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-red-500/20 border border-white/[0.1] flex items-center justify-center text-slate-300 hover:text-red-400 transition-all"
+                  className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.12] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -414,7 +435,7 @@ const Navbar = () => {
               <div className="flex items-center gap-2">
                 <Link
                   to="/super-admin-dashboard"
-                  className="flex items-center gap-1.5 text-xs font-bold text-red-300 bg-red-500/15 border border-red-500/35 px-3.5 py-1.5 rounded-full hover:bg-red-500/25 transition-all"
+                  className="flex items-center gap-1.5 text-xs font-bold text-red-200 bg-red-500/20 backdrop-blur-xl border border-red-500/40 px-3.5 py-1.5 rounded-full hover:bg-red-500/30 transition-all"
                 >
                   <Shield className="w-3.5 h-3.5 text-red-400" />
                   <span>Admin Hub</span>
@@ -423,7 +444,7 @@ const Navbar = () => {
                   type="button"
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-red-500/20 border border-white/[0.1] flex items-center justify-center text-slate-300 hover:text-red-400 transition-all"
+                  className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.12] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -442,7 +463,7 @@ const Navbar = () => {
               type="button"
               onClick={() => setIsMobileOpen(!isMobileOpen)}
               aria-label="Toggle mobile menu"
-              className="lg:hidden w-9 h-9 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-white"
+              className="lg:hidden w-9 h-9 rounded-full bg-white/[0.08] border border-white/[0.12] flex items-center justify-center text-white"
             >
               {isMobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
@@ -451,7 +472,7 @@ const Navbar = () => {
 
         {/* Mobile Drawer */}
         {isMobileOpen && (
-          <div className="lg:hidden bg-[#0e0e15]/95 backdrop-blur-2xl border-t border-white/[0.08] px-6 py-5 space-y-4">
+          <div className="lg:hidden bg-[#0e111b]/95 backdrop-blur-2xl border-t border-white/[0.1] px-6 py-5 space-y-4">
             <SearchBar />
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
               <Link to="/" className="glass-card rounded-xl px-3.5 py-2.5 text-white">
@@ -464,7 +485,7 @@ const Navbar = () => {
                 Collections
               </Link>
               <Link to="/catalog?section=shows" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                TV & Series
+                TV &amp; Series
               </Link>
               <Link to="/watchlist" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
                 Watchlist ({watchlistCount})
@@ -487,10 +508,10 @@ const Navbar = () => {
         )}
       </header>
 
-      {/* Glassmorphic Global Search Modal */}
+      {/* Glassmorphic Search Modal */}
       {isSearchOpen && (
         <div
-          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-start justify-center pt-20 px-4"
+          className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-xl flex items-start justify-center pt-20 px-4"
           onClick={() => setIsSearchOpen(false)}
         >
           <div
@@ -498,13 +519,13 @@ const Navbar = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                Search Movies, Series & Ghibli Classics
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
+                Search Movies, Series &amp; Ghibli Classics
               </span>
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.15] flex items-center justify-center text-slate-300"
+                className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.16] flex items-center justify-center text-slate-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -522,7 +543,7 @@ const Navbar = () => {
                   key={to}
                   to={to}
                   onClick={() => setIsSearchOpen(false)}
-                  className="text-[11px] font-semibold bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] px-3 py-1.5 rounded-full text-slate-300 hover:text-white transition-colors"
+                  className="text-[11px] font-semibold bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.1] px-3 py-1.5 rounded-full text-slate-200 hover:text-white transition-colors"
                 >
                   {label}
                 </Link>
@@ -532,10 +553,10 @@ const Navbar = () => {
         </div>
       )}
 
-      {/* Obsidian Glassmorphic City Modal */}
+      {/* City Selector Glass Modal */}
       {isLocationModalOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-xl p-4"
           onClick={() => setIsLocationModalOpen(false)}
         >
           <div
@@ -545,7 +566,7 @@ const Navbar = () => {
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(false)}
-              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.15] text-slate-300 flex items-center justify-center transition-colors"
+              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-slate-200 flex items-center justify-center transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -567,8 +588,8 @@ const Navbar = () => {
                     onClick={() => handleCitySelect(city.name)}
                     className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
                       active
-                        ? "bg-[#e50914]/15 border-[#e50914] text-white"
-                        : "bg-white/[0.03] border-white/[0.08] text-slate-300 hover:bg-white/[0.08] hover:text-white"
+                        ? "bg-[#e50914]/20 border-[#e50914] text-white"
+                        : "bg-white/[0.04] border-white/[0.1] text-slate-200 hover:bg-white/[0.1] hover:text-white"
                     }`}
                   >
                     <span className="text-2xl">{city.icon}</span>

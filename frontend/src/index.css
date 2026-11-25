@@ -12,8 +12,8 @@
   --primary-dark: #b90710;
   --primary-glow: rgba(229, 9, 20, 0.35);
 
-  --bg-obsidian: #09090d;
-  --bg-surface: #12121a;
+  --bg-obsidian: #07080d;
+  --bg-surface: rgba(16, 19, 29, 0.62);
 
   color-scheme: dark;
   color: #f8fafc;
@@ -27,9 +27,6 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--bg-obsidian);
-  background-image:
-    radial-gradient(ellipse 80% 40% at 50% -10%, rgba(229, 9, 20, 0.14), transparent 70%),
-    radial-gradient(ellipse 60% 35% at 90% 10%, rgba(120, 20, 40, 0.1), transparent 70%);
   color: #f1f5f9;
   overflow-x: hidden;
 }
@@ -65,33 +62,33 @@ body {
 
 @layer base {
   body {
-    @apply bg-[#09090d] text-slate-100;
+    @apply bg-[#07080d] text-slate-100;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white/[0.035] backdrop-blur-xl border border-white/[0.08] shadow-[0_12px_40px_rgba(0,0,0,0.45)] transition-all duration-300;
+    @apply bg-[#0e111b]/55 backdrop-blur-2xl border border-white/[0.11] shadow-[0_18px_50px_rgba(0,0,0,0.55)] transition-all duration-300;
   }
 
   .glass-card-hover {
-    @apply bg-white/[0.035] backdrop-blur-xl border border-white/[0.08] shadow-[0_12px_40px_rgba(0,0,0,0.45)] hover:bg-white/[0.06] hover:border-white/[0.16] transition-all duration-300;
+    @apply bg-[#0e111b]/55 backdrop-blur-2xl border border-white/[0.11] shadow-[0_18px_50px_rgba(0,0,0,0.55)] hover:bg-[#151a28]/70 hover:border-white/[0.22] transition-all duration-300;
   }
 
   .glass-pill {
-    @apply bg-white/[0.06] backdrop-blur-2xl border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)];
+    @apply bg-[#0e111b]/65 backdrop-blur-2xl border border-white/[0.14] shadow-[0_10px_36px_rgba(0,0,0,0.55)];
   }
 
   .glass-panel {
-    @apply bg-[#12121a]/80 backdrop-blur-2xl border border-white/[0.1] shadow-[0_20px_60px_rgba(0,0,0,0.65)];
+    @apply bg-[#0e111b]/70 backdrop-blur-3xl border border-white/[0.14] shadow-[0_28px_80px_rgba(0,0,0,0.75)];
   }
 
   .glass-button {
-    @apply bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.14] text-white transition-all duration-200;
+    @apply bg-white/[0.09] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.16] text-white transition-all duration-200;
   }
 
   .btn-crimson {
-    @apply bg-[#e50914] hover:bg-[#ff1c28] text-white font-bold shadow-[0_8px_28px_rgba(229,9,20,0.38)] hover:shadow-[0_10px_36px_rgba(229,9,20,0.55)] transition-all duration-200;
+    @apply bg-[#e50914] hover:bg-[#ff1c28] text-white font-bold shadow-[0_8px_28px_rgba(229,9,20,0.42)] hover:shadow-[0_10px_36px_rgba(229,9,20,0.6)] transition-all duration-200;
   }
 
   .premium-gradient-text {

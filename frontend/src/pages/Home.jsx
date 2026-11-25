@@ -25,6 +25,7 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import MovieCard from "../components/MovieCard";
 import { resolveMoviePoster } from "../utils/media";
 import { isInWatchlist, toggleWatchlist } from "../utils/watchlist";
+import { setActiveBackdrop } from "../utils/backdrop";
 
 const BROWSE_CATEGORIES = [
   {
@@ -288,6 +289,8 @@ const Home = () => {
   }, []);
 
   const slides = feed?.heroSlides || [];
+  const activeSlide = slides[slideIndex] || feed?.featured?.[0];
+  const heroWatchlisted = activeSlide ? isInWatchlist(activeSlide.id) : false;
 
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return;
@@ -297,12 +300,15 @@ const Home = () => {
     return () => clearInterval(timer);
   }, [slides.length, isPaused]);
 
+  useEffect(() => {
+    if (activeSlide?.backdrop_path) {
+      setActiveBackdrop(activeSlide.backdrop_path, "hero");
+    }
+  }, [activeSlide?.backdrop_path]);
+
   if (loading) {
     return <LoadingSpinner fullPage message="Curating CineReward Cinema..." />;
   }
-
-  const activeSlide = slides[slideIndex] || feed?.featured?.[0];
-  const heroWatchlisted = activeSlide ? isInWatchlist(activeSlide.id) : false;
 
   const collectionPosterFan = (feed?.collections || [])
     .flatMap((c) => c.previewPosters || [])
@@ -310,11 +316,11 @@ const Home = () => {
     .slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20">
+    <div className="min-h-screen pb-20">
       {/* 1. Full-Bleed Cinematic Hero Spotlight Carousel (Screenshot 3) */}
       {activeSlide && (
         <section
-          className="relative w-full min-h-[76vh] flex items-end overflow-hidden -mt-20 pt-24"
+          className="relative w-full min-h-[78vh] flex items-end overflow-hidden -mt-20 pt-24"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
@@ -324,10 +330,10 @@ const Home = () => {
               resolveMoviePoster(activeSlide.poster_path, activeSlide.id)
             }
             alt={activeSlide.title}
-            className="absolute inset-0 w-full h-full object-cover object-center transition-all duration-700 scale-[1.02]"
+            className="absolute inset-0 w-full h-full object-cover object-center transition-all duration-700"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#09090d] via-[#09090d]/75 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#09090d] via-[#09090d]/25 to-[#09090d]/40" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#07080d]/95 via-[#07080d]/55 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07080d]/95 via-[#07080d]/20 to-[#07080d]/45" />
 
           <div className="relative z-10 max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 pb-12 pt-16">
             <div className="max-w-2xl">

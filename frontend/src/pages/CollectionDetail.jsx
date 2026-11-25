@@ -98,14 +98,14 @@ const CollectionDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20 pt-8">
+    <div className="min-h-screen pb-20 pt-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <Link
           to="/collections"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white mb-5 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-200 hover:text-white glass-button px-3.5 py-1.5 rounded-full mb-5 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>All Collections</span>
+          <span>All collections</span>
         </Link>
 
         <div className="mb-7">

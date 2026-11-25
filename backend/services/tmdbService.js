@@ -901,7 +901,7 @@ const tmdbService = {
       const showId = idStr.replace(/^tvmaze-/, "");
       try {
         const res = await axios.get(`${TVMAZE_BASE_URL}/shows/${showId}`, {
-          params: { embed: "cast" },
+          params: { "embed[]": ["cast", "episodes"] },
           timeout: 8000,
         });
         const show = res.data;
@@ -913,10 +913,33 @@ const tmdbService = {
           profile_path: c.person?.image?.medium || null,
         }));
         const allTvMaze = await tmdbService.getTvMazeShows(0);
+        const rawEpisodes = show._embedded?.episodes || [];
+        const seasonNumbers = [...new Set(rawEpisodes.map((e) => e.season || 1))];
+        const episodes = rawEpisodes
+          .filter((e) => (e.season || 1) === (seasonNumbers[0] || 1))
+          .map((e) => ({
+            id: e.id,
+            episode_number: e.number,
+            season_number: e.season || 1,
+            name: e.name,
+            overview: (e.summary || "").replace(/<[^>]+>/g, "").trim(),
+            runtime: e.runtime || normalized.runtime || 45,
+            still_path: e.image?.original || e.image?.medium || normalized.backdrop_path,
+          }));
+
         return {
           ...normalized,
           status: show.status || "Running",
           tagline: show.network?.name || show.webChannel?.name || "TV Series",
+          network: show.network?.name || show.webChannel?.name || null,
+          seasonsCount: seasonNumbers.length || 1,
+          episodesCount: rawEpisodes.length || episodes.length,
+          seasons: seasonNumbers.map((s) => ({
+            season_number: s,
+            name: `Season ${s}`,
+            episode_count: rawEpisodes.filter((e) => (e.season || 1) === s).length,
+          })),
+          episodes,
           cast,
           similar: allTvMaze.filter((s) => s.id !== normalized.id).slice(0, 6),
         };
@@ -928,7 +951,7 @@ const tmdbService = {
     // 3. TMDB TV Show
     if (idStr.startsWith("tv-") || mediaTypeHint === "tv") {
       const tmdbTvId = idStr.replace(/^tv-/, "");
-      const cacheKey = `detail:tv:${tmdbTvId}`;
+      const cacheKey = `detail:tv:${tmdbTvId}:v2`;
       const cached = getCachedData(cacheKey, SHORT_TTL);
       if (cached) return cached;
 
@@ -950,13 +973,45 @@ const tmdbService = {
             ? data.recommendations.results
             : data.similar?.results || [];
 
+        const validSeasons = (data.seasons || []).filter((s) => s.season_number >= 1);
+        const firstSeasonNumber = validSeasons[0]?.season_number || 1;
+        let episodes = [];
+        try {
+          const seasonData = await tmdbGet(
+            `/tv/${tmdbTvId}/season/${firstSeasonNumber}`,
+            {},
+            SHORT_TTL
+          );
+          episodes = (seasonData.episodes || []).map((ep) => ({
+            id: ep.id,
+            episode_number: ep.episode_number,
+            season_number: ep.season_number,
+            name: ep.name,
+            overview: ep.overview || "",
+            runtime: ep.runtime || data.episode_run_time?.[0] || 45,
+            still_path: ep.still_path
+              ? resolvePosterUrl(ep.still_path, false)
+              : normalized.backdrop_path,
+          }));
+        } catch {
+          episodes = [];
+        }
+
         const full = {
           ...normalized,
           status: data.status || "Returning Series",
           tagline: data.tagline || "",
           runtime: data.episode_run_time?.[0] || 45,
-          seasonsCount: data.number_of_seasons,
-          episodesCount: data.number_of_episodes,
+          seasonsCount: data.number_of_seasons || validSeasons.length || 1,
+          episodesCount: data.number_of_episodes || episodes.length,
+          network: data.networks?.[0]?.name || null,
+          seasons: validSeasons.map((s) => ({
+            season_number: s.season_number,
+            name: s.name || `Season ${s.season_number}`,
+            episode_count: s.episode_count,
+          })),
+          episodes,
+          spokenLanguages: (data.spoken_languages || []).map((l) => l.english_name).filter(Boolean),
           director: creator,
           certification: cert,
           trailerKey: trailer?.key || null,
@@ -1047,6 +1102,41 @@ const tmdbService = {
         similar: FALLBACK_MOVIES,
       };
     }
+  },
+
+  getTvSeason: async (rawParamId, seasonNumber = 1) => {
+    const idStr = String(rawParamId);
+    const seasonNum = Math.max(1, parseInt(seasonNumber, 10) || 1);
+
+    if (idStr.startsWith("tvmaze-")) {
+      const showId = idStr.replace(/^tvmaze-/, "");
+      const res = await axios.get(`${TVMAZE_BASE_URL}/shows/${showId}/episodes`, {
+        timeout: 8000,
+      });
+      return (Array.isArray(res.data) ? res.data : [])
+        .filter((e) => (e.season || 1) === seasonNum)
+        .map((e) => ({
+          id: e.id,
+          episode_number: e.number,
+          season_number: e.season || 1,
+          name: e.name,
+          overview: (e.summary || "").replace(/<[^>]+>/g, "").trim(),
+          runtime: e.runtime || 45,
+          still_path: e.image?.original || e.image?.medium || "",
+        }));
+    }
+
+    const tmdbTvId = idStr.replace(/^tv-/, "");
+    const data = await tmdbGet(`/tv/${tmdbTvId}/season/${seasonNum}`, {}, SHORT_TTL);
+    return (data.episodes || []).map((ep) => ({
+      id: ep.id,
+      episode_number: ep.episode_number,
+      season_number: ep.season_number,
+      name: ep.name,
+      overview: ep.overview || "",
+      runtime: ep.runtime || 45,
+      still_path: ep.still_path ? resolvePosterUrl(ep.still_path, false) : "",
+    }));
   },
 
   getMovieCredits: async (movieId) => {

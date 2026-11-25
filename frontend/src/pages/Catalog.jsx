@@ -6,8 +6,27 @@ import MovieCard from "../components/MovieCard";
 import CatalogFilterBar from "../components/CatalogFilterBar";
 import LoadingSpinner from "../components/LoadingSpinner";
 
+const GENRE_TITLES = {
+  28: "Action",
+  12: "Adventure",
+  16: "Animation",
+  35: "Comedy",
+  80: "Crime",
+  99: "Documentary",
+  18: "Drama",
+  14: "Fantasy",
+  10751: "Family",
+  27: "Horror",
+  9648: "Mystery",
+  10749: "Romance",
+  878: "Sci-Fi",
+  53: "Thriller",
+  36: "History",
+  10752: "War",
+};
+
 const SECTION_TITLES = {
-  all: "Explore Catalog",
+  all: "Discover your next watch",
   featured: "Featured Selections",
   "now-playing": "Now Playing in Theatres",
   trending: "Recently Updated & Trending",
@@ -109,11 +128,14 @@ const Catalog = () => {
   const heading = filters.q
     ? `Results for "${filters.q}"`
     : OTT_TITLES[filters.ott] ||
+      (filters.genre && filters.genre !== "all"
+        ? GENRE_TITLES[filters.genre] || filters.genre
+        : null) ||
       SECTION_TITLES[filters.section] ||
-      "All Movies & Series";
+      "Discover your next watch";
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20 pt-8">
+    <div className="min-h-screen pb-20 pt-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-7">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400 mb-2">

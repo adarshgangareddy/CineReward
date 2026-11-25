@@ -41,8 +41,8 @@ const YEAR_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: "popular", label: "Most popular" },
-  { value: "top_rated", label: "Top rated" },
-  { value: "newest", label: "Recently released" },
+  { value: "top_rated", label: "TMDB rating" },
+  { value: "newest", label: "Recently added" },
 ];
 
 const CatalogFilterBar = ({
@@ -206,3 +206,4 @@ const CatalogFilterBar = ({
 };
 
 export default CatalogFilterBar;
+

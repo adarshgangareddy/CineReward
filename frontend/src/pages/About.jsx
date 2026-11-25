@@ -32,7 +32,7 @@ const features = [
 ];
 
 const About = () => (
-  <div className="bg-[#09090d] pb-20">
+  <div className="pb-20">
     <section className="relative overflow-hidden px-6 py-24 bg-[linear-gradient(90deg,rgba(9,9,13,.98),rgba(9,9,13,.68)),url('https://image.tmdb.org/t/p/original/8YFL5QQVPy3Mrs2MKOD6RZEa2Lf.jpg')] bg-cover bg-center border-b border-white/[0.06]">
       <div className="max-w-7xl mx-auto">
         <p className="text-[#ff2e3b] font-bold uppercase tracking-[0.26em] text-xs mb-3">

@@ -169,7 +169,7 @@ const PartnerWithUs = () => {
 
   if (submitted) {
     return (
-      <div className="bg-slate-950 min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] animate-pulse"></div>
         <div className="glass-card rounded-[4rem] p-16 max-w-2xl w-full text-center relative z-10 border-primary/20 shadow-[0_0_100px_rgba(244,63,94,0.1)]">
            <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-10 ring-8 ring-primary/5">
@@ -191,13 +191,13 @@ const PartnerWithUs = () => {
   }
 
   return (
-    <div className="bg-slate-950 min-h-screen pb-20 relative overflow-hidden">
+    <div className="min-h-screen pb-20 relative overflow-hidden">
       {/* Background Decorative Glows */}
       <div className="fixed top-1/4 left-0 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[160px] pointer-events-none"></div>
       <div className="fixed bottom-1/4 right-0 w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[160px] pointer-events-none"></div>
       
       {/* Hero */}
-      <div className="bg-slate-950 pt-32 pb-48 px-6 relative overflow-hidden">
+      <div className="pt-28 pb-44 px-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[120px] -mr-64 -mt-64 animate-pulse"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] -ml-64 -mb-64"></div>
         

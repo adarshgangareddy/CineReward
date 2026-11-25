@@ -226,9 +226,9 @@ const SuperAdminDashboard = () => {
   if (loading) return <LoadingSpinner fullPage message="Loading Core Systems..." />;
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20">
+    <div className="min-h-screen pb-20">
       {/* Header */}
-      <div className="bg-[#101018]/90 border-b border-white/[0.08] pt-10 pb-20 px-4 sm:px-6 lg:px-8">
+      <div className="bg-[#0e111b]/65 backdrop-blur-2xl border-b border-white/[0.1] pt-10 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-[#e50914]/15 text-[#ff2e3b] rounded-2xl flex items-center justify-center border border-[#e50914]/30">

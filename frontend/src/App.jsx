@@ -4,6 +4,7 @@ import axios from "axios";
 import { requestForToken, onMessageListener } from "./firebase";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import AmbientBackdrop from "./components/AmbientBackdrop";
 import NotificationToast from "./components/NotificationToast";
 import Home from "./pages/Home";
 import Catalog from "./pages/Catalog";
@@ -101,9 +102,11 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen flex flex-col bg-[#09090d] text-slate-200">
-        <Navbar />
-        <main className="flex-grow">
+      <div className="min-h-screen flex flex-col text-slate-200 relative">
+        <AmbientBackdrop />
+        <div className="relative z-10 min-h-screen flex flex-col">
+          <Navbar />
+          <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/catalog" element={<Catalog />} />
@@ -149,6 +152,7 @@ function App() {
           </Routes>
         </main>
         <Footer />
+        </div>
 
         <NotificationToast
           notification={activeNotification}

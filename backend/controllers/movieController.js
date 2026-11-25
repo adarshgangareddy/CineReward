@@ -74,6 +74,15 @@ const movieController = {
     }
   },
 
+  getSeason: async (req, res) => {
+    try {
+      const episodes = await tmdbService.getTvSeason(req.params.id, req.params.season);
+      res.json(episodes);
+    } catch (err) {
+      res.status(500).json({ message: "Error fetching season episodes", error: err.message });
+    }
+  },
+
   search: async (req, res) => {
     try {
       const { q } = req.query;

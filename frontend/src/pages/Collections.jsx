@@ -43,7 +43,7 @@ const Collections = () => {
       : collections.filter((c) => c.category === activeCategory);
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20 pt-8">
+    <div className="min-h-screen pb-20 pt-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400 mb-2">

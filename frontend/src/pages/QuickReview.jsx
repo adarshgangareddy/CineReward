@@ -55,52 +55,52 @@ const QuickReview = () => {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center">
       <LoadingSpinner message="Validating Review Session..." />
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 px-6 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
       <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
         <Ticket className="w-10 h-10 text-red-500 opacity-50" />
       </div>
       <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">Access Denied</h2>
-      <p className="text-slate-500 max-w-sm mb-8">{error}</p>
+      <p className="text-slate-400 max-w-sm mb-8">{error}</p>
       <a href="/" className="text-primary font-bold hover:underline">Back to Home</a>
     </div>
   );
 
   if (submitted) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 px-6 text-center animate-in fade-in zoom-in duration-500">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center animate-in fade-in zoom-in duration-500">
       <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mb-8 relative">
         <CheckCircle className="w-12 h-12 text-green-500" />
         <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping"></div>
       </div>
       <h2 className="text-4xl font-black text-white mb-4 italic tracking-tighter uppercase">Review Submitted!</h2>
-      <p className="text-slate-400 max-w-sm text-lg leading-relaxed mb-10">
+      <p className="text-slate-300 max-w-sm text-lg leading-relaxed mb-10">
         Thank you for your feedback on <span className="text-white font-bold">{ticket.movieTitle}</span>. 
         High-quality reviews earn reward coins!
       </p>
-      <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl mb-12">
+      <div className="glass-card p-6 rounded-3xl mb-12">
         <div className="flex items-center gap-4 text-left">
            <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center">
              <Heart className="w-6 h-6 text-primary fill-primary" />
            </div>
            <div>
              <p className="text-white font-bold text-sm">You earned a chance!</p>
-             <p className="text-slate-500 text-xs">Our team will review your feedback soon.</p>
+             <p className="text-slate-400 text-xs">Our team will review your feedback soon.</p>
            </div>
         </div>
       </div>
-      <a href="/" className="bg-primary text-white font-black px-10 py-4 rounded-2xl shadow-xl shadow-primary/20 hover:scale-105 transition-all uppercase tracking-widest text-sm">
+      <a href="/" className="btn-crimson px-10 py-4 rounded-2xl uppercase tracking-widest text-sm">
         Browse More Movies
       </a>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 py-12 px-6 flex flex-col items-center">
+    <div className="min-h-screen py-12 px-6 flex flex-col items-center">
       <div className="w-full max-w-lg">
         <div className="text-center mb-12">
            <div className="inline-block bg-primary/10 text-primary text-[10px] font-black px-4 py-1 rounded-full border border-primary/20 uppercase tracking-[0.3em] mb-4">
@@ -110,12 +110,12 @@ const QuickReview = () => {
            <p className="text-slate-500 font-medium">Rate your experience for <span className="text-white">{ticket.movieTitle}</span></p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden">
+        <form onSubmit={handleSubmit} className="glass-panel rounded-[2.5rem] p-8 md:p-12 relative overflow-hidden">
            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
            
            <div className="mb-12">
              <div className="flex justify-between items-end mb-6 pl-1">
-               <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Select Rating</span>
+               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Select Rating</span>
                <span className="text-4xl font-black text-primary italic transition-all">{rating || hover || '--'}</span>
              </div>
              
@@ -126,7 +126,7 @@ const QuickReview = () => {
                    <button
                      key={index}
                      type="button"
-                     className={`transition-all duration-200 transform hover:scale-125 focus:outline-none ${starValue <= (hover || rating) ? 'text-yellow-500' : 'text-slate-800'}`}
+                     className={`transition-all duration-200 transform hover:scale-125 focus:outline-none ${starValue <= (hover || rating) ? 'text-yellow-500' : 'text-slate-700'}`}
                      onClick={() => setRating(starValue)}
                      onMouseEnter={() => setHover(starValue)}
                      onMouseLeave={() => setHover(0)}
@@ -142,9 +142,9 @@ const QuickReview = () => {
            </div>
 
            <div className="space-y-3 mb-10">
-             <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-1">Share your thoughts (Optional)</label>
+             <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">Share your thoughts (Optional)</label>
              <textarea
-               className="w-full bg-slate-950 border-2 border-slate-850 rounded-3xl p-6 text-white focus:outline-none focus:border-primary transition-all min-h-[160px] font-medium placeholder:text-slate-700"
+               className="w-full bg-white/[0.05] border border-white/[0.12] rounded-3xl p-6 text-white focus:outline-none focus:border-primary transition-all min-h-[160px] font-medium placeholder:text-slate-500"
                placeholder="What did you love about the movie? Story, cast, cinematography..."
                value={comment}
                onChange={(e) => setComment(e.target.value)}

@@ -298,9 +298,9 @@ const SeatSelection = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#09090d] pb-20">
+    <div className="min-h-screen pb-20">
       {/* Obsidian Glass Header */}
-      <div className="bg-[#101018]/90 backdrop-blur-2xl border-b border-white/[0.08] pt-8 pb-6">
+      <div className="bg-[#0e111b]/65 backdrop-blur-2xl border-b border-white/[0.1] pt-8 pb-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <button
             type="button"
