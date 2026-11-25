@@ -1,89 +1,137 @@
-import { useState } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { ShieldAlert, Key } from 'lucide-react';
+import { useState } from "react";
+import axios from "axios";
+import { useNavigate, Link } from "react-router-dom";
+import { ShieldAlert, KeyRound, Eye, EyeOff, Lock, User } from "lucide-react";
+import { saveRoleSession } from "../utils/auth";
 
 const SuperAdminLogin = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
-      const cleanUsername = username.trim();
-      const cleanPassword = password.trim();
-      const res = await axios.post('/api/admin/super-login', { username: cleanUsername, password: cleanPassword });
-      localStorage.setItem('superAdmin', JSON.stringify(res.data));
-      navigate('/super-admin-dashboard');
+      const res = await axios.post("/api/admin/super-login", {
+        username: username.trim(),
+        password: password.trim(),
+        secretKey: secretKey.trim() || undefined,
+      });
+      saveRoleSession("super_admin", res.data, res.data.token);
+      navigate("/super-admin-dashboard", { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err.response?.data?.message || "Admin authentication failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center bg-[#f5f5f5] px-6">
-      <div className="bg-slate-900 border border-slate-800 p-10 rounded-[3rem] w-full max-w-md shadow-2xl relative overflow-hidden">
-        {/* Decorative background circle */}
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-red-500/10 rounded-full blur-3xl"></div>
-
-        <div className="text-center mb-10 relative z-10">
-          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <ShieldAlert className="w-10 h-10 text-red-500" />
+    <div className="min-h-[85vh] flex items-center justify-center px-6 py-12 relative overflow-hidden">
+      <div className="glass-panel rounded-3xl p-8 sm:p-10 w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-red-500/15 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-8 h-8 text-[#ff2e3b]" />
           </div>
-          <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase">Super<span className="text-red-500">Admin</span></h1>
-          <p className="text-slate-500 text-sm mt-2 font-medium">Authorized Personnel Only</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            Super Admin Core
+          </h1>
+          <p className="text-slate-400 text-xs mt-1">Authorized Personnel Only</p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-xl text-sm font-bold text-center mb-6 z-10 relative">
+          <div className="bg-red-500/10 border border-red-500/35 text-red-300 px-4 py-3 rounded-xl text-xs font-medium text-center mb-6">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6 relative z-10">
-          <div>
-            <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 ml-4">System Username</label>
-            <input 
-              type="text" 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              className="w-full bg-slate-950 border border-slate-800 text-white px-6 py-4 rounded-2xl focus:outline-none focus:border-red-500 transition-colors font-medium"
-              placeholder="Enter username"
-            />
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
+              Admin Username or Email
+            </label>
+            <div className="relative">
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                className="w-full bg-white/[0.04] border border-white/[0.1] text-white pl-10 pr-4 py-3.5 rounded-xl text-sm focus:outline-none focus:border-[#e50914] transition-colors"
+                placeholder="Enter username or email"
+              />
+            </div>
           </div>
 
-          <div>
-             <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 ml-4">Master Password</label>
-             <div className="relative">
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 text-white px-6 py-4 pr-12 rounded-2xl focus:outline-none focus:border-red-500 transition-colors font-medium"
-                  placeholder="••••••••"
-                />
-                <Key className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-600" />
-             </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
+              Master Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-white/[0.04] border border-white/[0.1] text-white pl-10 pr-11 py-3.5 rounded-xl text-sm focus:outline-none focus:border-[#e50914] transition-colors"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
-          <button 
-            type="submit" 
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
+              16-Digit Secret Code
+            </label>
+            <div className="relative">
+              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type={showSecret ? "text" : "password"}
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.1] text-white pl-10 pr-11 py-3.5 rounded-xl text-sm focus:outline-none focus:border-[#e50914] transition-colors"
+                placeholder="16-digit secret code"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret(!showSecret)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-red-500/20 mt-4 disabled:opacity-50"
+            className="w-full btn-crimson py-3.5 rounded-xl text-sm disabled:opacity-50 mt-2"
           >
-            {loading ? 'AUTHENTICATING...' : 'ACCESS DASHBOARD'}
+            {loading ? "Authenticating..." : "Access Admin Dashboard"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          <Link to="/login" className="text-[#ff2e3b] hover:underline font-semibold">
+            Back to Unified Login
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -1,31 +1,35 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Link } from 'react-router-dom';
-import { Ticket, Coins, Star, MessageSquare, Send, CheckCircle, Gift, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from "react";
+import axios from "axios";
+import { Link } from "react-router-dom";
+import {
+  Ticket,
+  Coins,
+  Star,
+  MessageSquare,
+  Send,
+  CheckCircle,
+  Gift,
+  ArrowRight,
+  Bookmark,
+} from "lucide-react";
+import { getActiveSession, saveRoleSession } from "../utils/auth";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 const UserDashboard = () => {
-  const getStoredUser = () => {
-    try {
-      const stored = localStorage.getItem('user');
-      if (!stored || stored === 'undefined') return null;
-      return JSON.parse(stored);
-    } catch (e) {
-      console.error('Failed to parse user from localStorage', e);
-      return null;
-    }
-  };
-
-  const [user, setUser] = useState(getStoredUser());
+  const [session] = useState(() => getActiveSession());
+  const [user, setUser] = useState(() => session?.data || null);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('watching'); // changed from 'tickets'
-  const [reviewForm, setReviewForm] = useState({ ticketId: '', movieId: '', rating: 10, comment: '' });
+  const [activeTab, setActiveTab] = useState("watching");
+  const [reviewForm, setReviewForm] = useState({
+    ticketId: "",
+    movieId: "",
+    rating: 10,
+    comment: "",
+  });
 
   useEffect(() => {
     fetchTickets();
-    // fetchTickets reads and also updates `user` (via setUser), so adding it
-    // as a dependency would cause an infinite refetch loop. It should only
-    // run once on mount and whenever explicitly called afterwards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -34,23 +38,21 @@ const UserDashboard = () => {
       setLoading(false);
       return;
     }
-    
+
     try {
       try {
         const userRes = await axios.get(`/api/users/${user.id}`);
         if (userRes.data) {
           const updatedUser = { ...user, coins: userRes.data.coins };
           setUser(updatedUser);
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-          // Signal Navbar to update
-          window.dispatchEvent(new Event('userUpdated'));
+          saveRoleSession("user", updatedUser, session?.token);
         }
       } catch (e) {
-        console.error('Failed to refresh user coins', e);
+        console.error("Failed to refresh user coins", e);
       }
-      
+
       const res = await axios.get(`/api/tickets/user/${user.id}`);
-      setTickets(res.data || []);
+      setTickets(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
       setTickets([]);
@@ -60,239 +62,301 @@ const UserDashboard = () => {
   };
 
   const handleRedeem = () => {
-    if (user.coins < 500) {
-      alert('You need at least 500 coins to redeem a free ticket!');
+    if ((user?.coins || 0) < 500) {
+      alert("You need at least 500 coins to redeem a free ticket voucher!");
       return;
     }
-    alert('Congratulations! You redeemed a free movie ticket. A voucher has been sent to your email.');
-    const updatedUser = { ...user, coins: user.coins - 500 };
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    alert(
+      "Congratulations! You can apply your coins directly on any movie checkout (100 coins per seat)."
+    );
   };
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    if (!user || !user.id) return alert("You must be logged in to submit a review.");
-    
+    if (!user || !user.id) return alert("Please sign in to submit a review.");
+
     try {
-      await axios.post('/api/reviews/submit', { userId: user.id, ...reviewForm });
-      alert('Review submitted! Thank you for your feedback.');
-      setReviewForm({ ticketId: '', movieId: '', rating: 10, comment: '' });
+      await axios.post("/api/reviews/submit", { userId: user.id, ...reviewForm });
+      alert("Verified review submitted! Movie teams will review it for 100 reward coins.");
+      setReviewForm({ ticketId: "", movieId: "", rating: 10, comment: "" });
       fetchTickets();
     } catch (err) {
-      alert('Failed to submit review');
+      alert(err.response?.data?.message || "Failed to submit review");
     }
   };
 
-  // Helper to determine if a ticket is in the past
   const isTicketPast = (dateStr, timeStr) => {
     try {
       if (!timeStr || !dateStr) return false;
-      // timeStr example: "07:30 PM", dateStr example: "3/14/2026"
-      const [time, modifier] = timeStr.split(' ');
-      let [hours, minutes] = time.split(':');
-      if (hours === '12') hours = '00';
-      if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-      
+      const [time, modifier] = timeStr.split(" ");
+      let [hours, minutes] = time.split(":");
+      if (hours === "12") hours = "00";
+      if (modifier === "PM") hours = parseInt(hours, 10) + 12;
       const ticketDate = new Date(`${dateStr} ${hours}:${minutes}`);
       return ticketDate < new Date();
     } catch {
-      return false; // Fallback
+      return false;
     }
   };
 
   const safeTickets = Array.isArray(tickets) ? tickets : [];
-  const watchingTickets = safeTickets.filter(t => !isTicketPast(t.date, t.time));
-  const previousTickets = safeTickets.filter(t => isTicketPast(t.date, t.time));
-  const activeTickets = activeTab === 'watching' ? watchingTickets : previousTickets;
+  const watchingTickets = safeTickets.filter((t) => !isTicketPast(t.date, t.time));
+  const previousTickets = safeTickets.filter((t) => isTicketPast(t.date, t.time));
+  const activeTickets = activeTab === "watching" ? watchingTickets : previousTickets;
 
-  if (loading) return <div className="text-center py-20 text-white">Loading your cinema profile...</div>;
+  if (loading) return <LoadingSpinner fullPage message="Loading Your Cinema Profile..." />;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
-      <div className="flex flex-col md:flex-row gap-8 items-start">
-        {/* Sidebar */}
-        <div className="w-full md:w-80 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 overflow-hidden relative">
-             <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-3xl font-black text-white">
-                  {user?.name?.[0] ? user.name[0].toUpperCase() : (user?.phone ? '📱' : 'U')}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
+        {/* Glass Profile Sidebar */}
+        <div className="w-full lg:w-80 space-y-4 shrink-0">
+          <div className="glass-panel rounded-3xl p-7 relative overflow-hidden">
+            <div className="flex items-center gap-4 mb-7">
+              {user?.profilePicture ? (
+                <img
+                  src={user.profilePicture}
+                  alt={user.name}
+                  className="w-14 h-14 rounded-full object-cover border border-white/20"
+                />
+              ) : (
+                <div className="w-14 h-14 bg-[#e50914] rounded-full flex items-center justify-center text-2xl font-black text-white">
+                  {user?.name?.[0]?.toUpperCase() || "U"}
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white leading-tight">{user?.name || 'Cine Viewer'}</h2>
-                 <p className="text-slate-500 text-xs truncate max-w-[150px]">{user?.email || user?.phone || 'No Contact Info'}</p>
-               </div>
-             </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="text-lg font-bold text-white truncate">
+                  {user?.name || "Cine Viewer"}
+                </h1>
+                <p className="text-slate-400 text-xs truncate">
+                  {user?.email || user?.phone || "CineReward Member"}
+                </p>
+              </div>
+            </div>
 
-             <div className="space-y-4">
-               <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                 <div className="flex justify-between items-center mb-1">
-                   <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Coin Balance</span>
-                   <Coins className="w-4 h-4 text-yellow-500" />
-                 </div>
-                 <p className="text-3xl font-black text-white">{user?.coins || 0}</p>
-               </div>
-               
-               <button 
+            <div className="space-y-4">
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Coin Balance
+                  </span>
+                  <Coins className="w-4 h-4 text-amber-400" />
+                </div>
+                <p className="text-3xl font-black text-white">{user?.coins || 0}</p>
+              </div>
+
+              <button
+                type="button"
                 onClick={handleRedeem}
-                className="w-full bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-black py-4 rounded-2xl transition-all shadow-xl shadow-yellow-500/10 flex items-center justify-center gap-2"
-               >
-                 <Gift className="w-5 h-5" />
-                 <span>REDEEM TICKET</span>
-               </button>
-               <p className="text-center text-[10px] text-slate-600 font-bold uppercase tracking-tight">500 Coins = 1 Free Ticket</p>
-             </div>
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs"
+              >
+                <Gift className="w-4 h-4" />
+                <span>Redeem With Coins</span>
+              </button>
+              <p className="text-center text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                100 Coins = 1 Seat Discount
+              </p>
+
+              <Link
+                to="/watchlist"
+                className="w-full glass-button py-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2"
+              >
+                <Bookmark className="w-3.5 h-3.5 text-[#ff2e3b]" />
+                <span>Open My Watchlist</span>
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-grow space-y-8">
-          <div className="flex gap-4 border-b border-slate-800 pb-2">
-            <button 
-              onClick={() => setActiveTab('watching')}
-              className={`px-4 py-2 font-bold text-sm transition-all relative ${activeTab === 'watching' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              Watching (Upcoming)
-              {activeTab === 'watching' && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded-t-full -mb-2"></div>}
-            </button>
-            <button 
-              onClick={() => setActiveTab('previous')}
-              className={`px-4 py-2 font-bold text-sm transition-all relative ${activeTab === 'previous' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              Previous (Watched)
-              {activeTab === 'previous' && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded-t-full -mb-2"></div>}
-            </button>
+        {/* Tickets & Reviews */}
+        <div className="flex-grow w-full space-y-6">
+          <div className="flex gap-3 border-b border-white/[0.08] pb-3">
+            {[
+              { id: "watching", label: `Upcoming (${watchingTickets.length})` },
+              { id: "previous", label: `Watched (${previousTickets.length})` },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                  activeTab === tab.id
+                    ? "bg-[#e50914] text-white"
+                    : "text-slate-400 hover:text-white bg-white/[0.04]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-6">
-            {activeTickets.map(ticket => (
-              <div key={ticket._id} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col sm:flex-row gap-8 transition-all hover:bg-slate-800/30">
+          <div className="space-y-4">
+            {activeTickets.map((ticket) => (
+              <div
+                key={ticket._id}
+                className="glass-card-hover rounded-3xl p-6 flex flex-col sm:flex-row gap-6"
+              >
                 <div className="flex-grow">
-                  <div className="flex justify-between items-start mb-6">
+                  <div className="flex justify-between items-start gap-4 mb-5">
                     <div>
-                      <h3 className="text-2xl font-black text-white mb-1 uppercase tracking-tight">{ticket.movieTitle || 'Movie Ticket'}</h3>
-                      <p className="text-primary font-bold text-sm tracking-wide">{ticket.theatre}</p>
+                      <h2 className="text-xl font-bold text-white mb-1">
+                        {ticket.movieTitle || "Movie Ticket"}
+                      </h2>
+                      <p className="text-[#ff2e3b] font-semibold text-xs">
+                        {ticket.theatre}
+                      </p>
                     </div>
                     {ticket.reviewSubmitted ? (
-                      <span className="bg-green-500/10 text-green-500 text-[10px] font-black px-3 py-1 rounded-full border border-green-500/20 uppercase tracking-widest flex items-center gap-1">
+                      <span className="bg-emerald-500/15 text-emerald-300 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" /> Reviewed
                       </span>
                     ) : (
-                      <button 
-                        onClick={() => setReviewForm({ ...reviewForm, ticketId: ticket._id, movieId: ticket.movieId })}
-                        className="bg-primary/10 text-primary text-[10px] font-black px-4 py-1.5 rounded-full border border-primary/20 hover:bg-primary hover:text-white transition-all uppercase tracking-widest flex items-center gap-1"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReviewForm({
+                            ...reviewForm,
+                            ticketId: ticket._id,
+                            movieId: ticket.movieId,
+                          })
+                        }
+                        className="btn-crimson text-[11px] px-4 py-1.5 rounded-full flex items-center gap-1.5"
                       >
-                        <MessageSquare className="w-3 h-3" /> Rate Now
+                        <MessageSquare className="w-3 h-3" /> Rate &amp; Earn
                       </button>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
-                      <span className="text-[10px] font-black text-slate-600 uppercase block mb-1">Seats</span>
-                      <span className="text-white font-bold">{ticket.seatNumber}</span>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        Seats
+                      </span>
+                      <span className="text-white font-semibold">{ticket.seatNumber}</span>
                     </div>
-                    <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
-                      <span className="text-[10px] font-black text-slate-600 uppercase block mb-1">Date</span>
-                      <span className="text-white font-bold">{ticket.date}</span>
+                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        Date
+                      </span>
+                      <span className="text-white font-semibold">{ticket.date}</span>
                     </div>
-                    <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800">
-                      <span className="text-[10px] font-black text-slate-600 uppercase block mb-1">Time</span>
-                      <span className="text-white font-bold">{ticket.time}</span>
+                    <div className="bg-white/[0.03] rounded-2xl p-3 border border-white/[0.07]">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        Time
+                      </span>
+                      <span className="text-white font-semibold">{ticket.time}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="sm:border-l sm:border-slate-800 sm:pl-8 flex flex-col justify-center items-center min-w-[120px]">
-                   <div className="w-20 h-20 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center mb-3">
-                     <Ticket className="w-10 h-10 text-slate-700" />
-                   </div>
-                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Ticket ID</span>
-                   <span className="text-white font-mono text-xs mt-1">#{ticket._id.slice(-6).toUpperCase()}</span>
+                <div className="sm:border-l sm:border-white/[0.08] sm:pl-6 flex flex-col justify-center items-center min-w-[110px]">
+                  <div className="w-16 h-16 bg-white/[0.04] rounded-2xl border border-white/[0.08] flex items-center justify-center mb-2">
+                    <Ticket className="w-7 h-7 text-slate-400" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">
+                    Ticket ID
+                  </span>
+                  <span className="text-white font-mono text-xs mt-0.5">
+                    #{ticket._id.slice(-6).toUpperCase()}
+                  </span>
                 </div>
               </div>
             ))}
 
             {activeTickets.length === 0 && (
-              <div className="text-center py-24 bg-slate-900/50 rounded-3xl border border-slate-800 border-dashed">
-                <Ticket className="w-16 h-16 text-slate-800 mx-auto mb-6" />
-                <p className="text-slate-500 font-bold text-xl mb-4">
-                  {activeTab === 'watching' ? "You don't have any upcoming movies." : "You haven't watched any movies yet."}
+              <div className="glass-card rounded-3xl p-16 text-center">
+                <Ticket className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-white font-bold text-base mb-2">
+                  {activeTab === "watching"
+                    ? "You don't have any upcoming bookings."
+                    : "No watched movie tickets yet."}
                 </p>
-                {activeTab === 'watching' && (
-                  <Link to="/" className="text-primary font-bold flex items-center justify-center gap-2 hover:gap-4 transition-all">
-                    Browse Movies <ArrowRight className="w-5 h-5" />
-                  </Link>
-                )}
+                <Link
+                  to="/catalog?section=now-playing"
+                  className="text-[#ff2e3b] text-xs font-bold inline-flex items-center gap-1.5 mt-2 hover:underline"
+                >
+                  Browse Now Playing <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Review Modal */}
+      {/* Verified Ticket Review Modal */}
       {reviewForm.ticketId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] p-10 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-primary"></div>
-              <h3 className="text-3xl font-black text-white mb-2 italic tracking-tighter uppercase">Rate Your Experience</h3>
-              <p className="text-slate-500 text-sm mb-8 font-medium">Earn 100 Reward Coins for your genuine feedback.</p>
-              <form onSubmit={handleReviewSubmit} className="space-y-6">
-                <div className="mb-8">
-                  <div className="flex justify-between items-end mb-6 pl-1">
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Select Rating</label>
-                    <span className="text-4xl font-black text-primary italic transition-all">{reviewForm.rating || '--'}</span>
-                  </div>
-                  
-                  <div className="flex justify-between group">
-                    {[...Array(10)].map((_, index) => {
-                      const starValue = index + 1;
-                      return (
-                        <button
-                          key={index}
-                          type="button"
-                          className={`transition-all duration-200 transform hover:scale-125 focus:outline-none ${starValue <= reviewForm.rating ? 'text-yellow-500' : 'text-slate-800'}`}
-                          onClick={() => setReviewForm({ ...reviewForm, rating: starValue })}
-                        >
-                          <Star 
-                           className={`w-6 h-6 md:w-8 md:h-8 ${starValue <= reviewForm.rating ? 'fill-yellow-500' : ''}`} 
-                           strokeWidth={starValue <= reviewForm.rating ? 0 : 2}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
+          <div className="glass-panel w-full max-w-lg rounded-3xl p-8 relative">
+            <h3 className="text-2xl font-bold text-white mb-1">Rate Your Experience</h3>
+            <p className="text-slate-400 text-xs mb-6">
+              Verified reviews are scored by AI — top picks earn 100 Reward Coins!
+            </p>
+            <form onSubmit={handleReviewSubmit} className="space-y-5">
+              <div>
+                <div className="flex justify-between items-end mb-3">
+                  <label className="text-xs font-bold text-slate-400 uppercase">
+                    Rating
+                  </label>
+                  <span className="text-2xl font-black text-[#ff2e3b]">
+                    {reviewForm.rating}/10
+                  </span>
                 </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] pl-1">Share your thoughts</label>
-                  <textarea 
-                    className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl p-5 text-white focus:outline-none focus:border-primary transition-all min-h-[150px] font-medium"
-                    placeholder="Tell us what you liked about the story, cast, and direction..."
-                    value={reviewForm.comment}
-                    onChange={(e) => setReviewForm({...reviewForm, comment: e.target.value})}
-                  ></textarea>
+                <div className="flex justify-between">
+                  {[...Array(10)].map((_, index) => {
+                    const starValue = index + 1;
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => setReviewForm({ ...reviewForm, rating: starValue })}
+                        className={`transition-transform hover:scale-125 ${
+                          starValue <= reviewForm.rating ? "text-amber-400" : "text-slate-700"
+                        }`}
+                      >
+                        <Star
+                          className={`w-6 h-6 ${
+                            starValue <= reviewForm.rating ? "fill-amber-400" : ""
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
-                
-                <div className="flex gap-4 pt-6">
-                  <button 
-                    type="button"
-                    onClick={() => setReviewForm({ ...reviewForm, ticketId: '' })}
-                    className="bg-slate-800 hover:bg-slate-700 text-white font-black px-6 rounded-full transition-all uppercase tracking-widest text-[10px] h-14"
-                  >
-                    Discard
-                  </button>
-                  <button 
-                    type="submit"
-                    className="flex-grow bg-primary hover:bg-primary-dark text-white font-black rounded-full transition-all shadow-xl shadow-primary/30 flex items-center justify-center gap-2 uppercase tracking-widest text-xs h-14"
-                  >
-                    <Send className="w-4 h-4 fill-white" />
-                    <span>Send Review</span>
-                  </button>
-                </div>
-              </form>
-           </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">
+                  Your Review
+                </label>
+                <textarea
+                  className="w-full bg-white/[0.04] border border-white/[0.1] rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-[#e50914] min-h-[130px]"
+                  placeholder="Share what stood out — story, direction, soundtrack, performances..."
+                  value={reviewForm.comment}
+                  onChange={(e) =>
+                    setReviewForm({ ...reviewForm, comment: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewForm({ ...reviewForm, ticketId: "" })}
+                  className="glass-button px-5 py-3 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-grow btn-crimson py-3 rounded-xl flex items-center justify-center gap-2 text-xs"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Submit Verified Review</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -17,6 +17,10 @@ const requireOwnTeamOrSuperadmin = requireSelfOrRole(
   "super_admin",
 );
 
+// Admin Login Routes (legacy/direct portals)
+router.post("/super-login", adminController.superLogin);
+router.post("/team/login", movieTeamController.login);
+
 // Admin Routes
 router.get(
   "/stats",

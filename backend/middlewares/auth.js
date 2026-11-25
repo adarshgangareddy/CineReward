@@ -5,9 +5,9 @@ const jwt = require("jsonwebtoken");
 // role/ownership checks below.
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
 
-  if (!token) {
+  if (!token || token === "undefined" || token === "null") {
     return res.status(401).json({ message: "Authentication required" });
   }
 
@@ -19,6 +19,20 @@ const authenticate = (req, res, next) => {
   }
 };
 
+// Attaches req.auth when a valid Bearer token is present, without blocking anonymous requests.
+const optionalAuthenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (token && token !== "undefined" && token !== "null") {
+    try {
+      req.auth = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      req.auth = null;
+    }
+  }
+  next();
+};
+
 // Restricts access to one of the given roles. Use after `authenticate`.
 const roleAliases = {
   admin: "super_admin",
@@ -26,11 +40,13 @@ const roleAliases = {
   movieteam: "movie_team",
 };
 
+const normalizeRole = (role) => roleAliases[role] || role;
+
 const requireRole =
   (...roles) =>
   (req, res, next) => {
-    const normalizedRole = roleAliases[req.auth?.role] || req.auth?.role;
-    const normalizedRoles = roles.map((role) => roleAliases[role] || role);
+    const normalizedRole = normalizeRole(req.auth?.role);
+    const normalizedRoles = roles.map(normalizeRole);
     if (!req.auth || !normalizedRoles.includes(normalizedRole)) {
       return res
         .status(403)
@@ -49,8 +65,10 @@ const requireSelfOrRole =
       return res.status(401).json({ message: "Authentication required" });
     }
     const targetId = getId(req);
+    const normalizedRole = normalizeRole(req.auth.role);
+    const normalizedAllowed = allowedRoles.map(normalizeRole);
     if (
-      allowedRoles.includes(req.auth.role) ||
+      normalizedAllowed.includes(normalizedRole) ||
       (targetId && String(req.auth.id) === String(targetId))
     ) {
       return next();
@@ -60,4 +78,4 @@ const requireSelfOrRole =
       .json({ message: "You do not have permission to perform this action" });
   };
 
-module.exports = { authenticate, requireRole, requireSelfOrRole };
+module.exports = { authenticate, optionalAuthenticate, requireRole, requireSelfOrRole };

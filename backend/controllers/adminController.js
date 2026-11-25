@@ -8,12 +8,14 @@ const jwt = require("jsonwebtoken");
 const adminController = {
   superLogin: async (req, res) => {
     try {
-      const { username, password } = req.body;
-      const cleanUsername = username?.trim();
+      const { username, password, secretKey } = req.body;
+      const cleanUsername = username?.trim().toLowerCase();
       const cleanPassword = password?.trim();
 
-      const adminUsername = process.env.SUPER_ADMIN_USERNAME;
+      const adminUsername = process.env.SUPER_ADMIN_USERNAME?.trim().toLowerCase();
+      const adminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
       const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
+      const adminSecret = process.env.SUPER_ADMIN_SECRET_CODE?.trim();
 
       if (!adminUsername || !adminPassword) {
         console.error(
@@ -24,16 +26,30 @@ const adminController = {
         });
       }
 
-      if (cleanUsername === adminUsername && cleanPassword === adminPassword) {
+      const matchesIdentity =
+        cleanUsername === adminUsername ||
+        (adminEmail && cleanUsername === adminEmail);
+
+      if (matchesIdentity && cleanPassword === adminPassword) {
+        if (adminSecret && /^\d{16}$/.test(adminSecret)) {
+          if (!secretKey || secretKey.trim() !== adminSecret) {
+            return res.status(401).json({
+              message: "Admin login requires the correct 16-digit secret code",
+            });
+          }
+        }
         const token = jwt.sign(
-          { role: "super_admin", username: cleanUsername },
+          { role: "super_admin", username: adminUsername },
           process.env.JWT_SECRET,
           { expiresIn: "7d" },
         );
         res.json({
           message: "Super Admin Login Successful",
+          id: "super_admin",
+          name: "Super Admin",
           role: "super_admin",
-          username: cleanUsername,
+          username: adminUsername,
+          email: adminEmail || adminUsername,
           token,
         });
       } else {

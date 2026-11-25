@@ -32,90 +32,89 @@ const features = [
 ];
 
 const About = () => (
-  <div className="pb-20">
-    <section className="relative overflow-hidden px-6 py-28 bg-[linear-gradient(90deg,rgba(2,6,23,.98),rgba(2,6,23,.64)),url('https://image.tmdb.org/t/p/original/8YFL5QQVPy3Mrs2MKOD6RZEa2Lf.jpg')] bg-cover bg-center">
+  <div className="bg-[#09090d] pb-20">
+    <section className="relative overflow-hidden px-6 py-24 bg-[linear-gradient(90deg,rgba(9,9,13,.98),rgba(9,9,13,.68)),url('https://image.tmdb.org/t/p/original/8YFL5QQVPy3Mrs2MKOD6RZEa2Lf.jpg')] bg-cover bg-center border-b border-white/[0.06]">
       <div className="max-w-7xl mx-auto">
-        <p className="text-primary font-black uppercase tracking-[0.3em] text-xs mb-4">
-          The CineReward story
+        <p className="text-[#ff2e3b] font-bold uppercase tracking-[0.26em] text-xs mb-3">
+          The CineReward Story
         </p>
-        <h1 className="text-5xl md:text-7xl font-black text-white max-w-3xl">
-          Cinema that gives something back.
+        <h1 className="text-4xl md:text-6xl font-black text-white max-w-3xl tracking-tight leading-tight">
+          Cinema discovery that gives something back.
         </h1>
-        <p className="text-slate-300 text-lg max-w-xl mt-6">
-          A better place to discover movies, book seats, share useful reviews,
-          and earn along the way.
+        <p className="text-slate-300 text-base md:text-lg max-w-xl mt-5 leading-relaxed">
+          Explore movies, curated franchises, and TV series powered by open public APIs —
+          book theatre seats, share AI-scored reviews, and earn real reward coins.
         </p>
       </div>
     </section>
-    <section className="max-w-7xl mx-auto px-6 py-20">
+    <section className="max-w-7xl mx-auto px-6 py-16">
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {features.map(([Icon, title, text]) => (
           <div
             key={title}
-            className="bg-slate-900 border border-white/10 rounded-2xl p-6"
+            className="glass-card rounded-2xl p-6"
           >
-            <Icon className="text-primary w-8 h-8 mb-8" />
-            <h2 className="text-white font-black text-xl mb-2">{title}</h2>
-            <p className="text-slate-400 text-sm leading-6">{text}</p>
+            <Icon className="text-[#ff2e3b] w-7 h-7 mb-6" />
+            <h2 className="text-white font-bold text-lg mb-2">{title}</h2>
+            <p className="text-slate-400 text-xs leading-6">{text}</p>
           </div>
         ))}
       </div>
     </section>
-    <section className="border-y border-white/10 bg-slate-900/40">
-      <div className="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-4 gap-8 text-center">
+    <section className="border-y border-white/[0.07] bg-white/[0.02]">
+      <div className="max-w-7xl mx-auto px-6 py-14 grid md:grid-cols-4 gap-8 text-center">
         {[
-          ["Book", "Choose a show"],
-          ["Review", "Share your take"],
-          ["Earn", "Collect coins"],
-          ["Redeem", "Enjoy more cinema"],
+          ["Book", "Choose a seat & showtime"],
+          ["Review", "Share your genuine take"],
+          ["Earn", "Collect AI-awarded coins"],
+          ["Redeem", "Unlock more cinema"],
         ].map(([title, text]) => (
           <div key={title}>
-            <p className="text-primary font-black text-2xl">{title}</p>
-            <p className="text-slate-400 mt-2">{text}</p>
+            <p className="text-[#ff2e3b] font-extrabold text-2xl">{title}</p>
+            <p className="text-slate-400 text-xs mt-1.5">{text}</p>
           </div>
         ))}
       </div>
     </section>
-    <section className="max-w-7xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
+    <section className="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-2 gap-12 items-center">
       <div>
-        <p className="text-primary text-xs font-black uppercase tracking-[0.3em] mb-4">
-          Built for movie people
+        <p className="text-[#ff2e3b] text-xs font-bold uppercase tracking-[0.25em] mb-3">
+          Built for movie communities
         </p>
-        <h2 className="text-4xl font-black text-white mb-5">
-          A small platform with a useful promise.
+        <h2 className="text-3xl font-extrabold text-white mb-4">
+          One unified hub for fans, creators &amp; theatres.
         </h2>
-        <p className="text-slate-400 leading-7">
-          CineReward brings discovery, booking, reviews, and partner experiences
-          into one focused home. Every part is designed to make the next movie
-          decision easier.
+        <p className="text-slate-400 text-sm leading-7">
+          CineReward combines MultiMovies-inspired glassmorphic discovery, curated collections,
+          seat reservations, and partner event management into one cohesive experience.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         {[
-          [Users, "50k+", "fans"],
-          [BadgeCheck, "4.8/5", "community rating"],
+          [Users, "50k+", "cinema fans"],
+          [BadgeCheck, "4.8/5", "community score"],
         ].map(([Icon, value, label]) => (
           <div
             key={label}
-            className="p-6 border border-white/10 rounded-2xl bg-slate-900"
+            className="p-6 glass-card rounded-2xl"
           >
-            <Icon className="text-primary mb-6" />
+            <Icon className="text-[#ff2e3b] mb-5" />
             <p className="text-3xl font-black text-white">{value}</p>
-            <p className="text-slate-500 text-sm mt-1">{label}</p>
+            <p className="text-slate-400 text-xs mt-1">{label}</p>
           </div>
         ))}
       </div>
     </section>
     <div className="max-w-7xl mx-auto px-6">
-      <div className="rounded-2xl bg-primary p-8 md:p-12 flex flex-col md:flex-row gap-6 items-center justify-between">
-        <h2 className="text-3xl font-black text-white">
-          Ready for your next movie?
+      <div className="rounded-3xl bg-gradient-to-r from-[#e50914] to-rose-700 p-8 md:p-10 flex flex-col md:flex-row gap-6 items-center justify-between shadow-2xl">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-white">
+          Ready for your next movie night?
         </h2>
         <Link
-          to="/"
-          className="bg-slate-950 text-white px-6 py-3 rounded-xl font-bold"
+          to="/catalog"
+          className="bg-white hover:bg-slate-100 text-slate-950 px-6 py-3 rounded-xl font-bold text-xs"
         >
-          Browse movies
+          Explore Catalog →
         </Link>
       </div>
     </div>

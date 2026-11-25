@@ -1,6 +1,6 @@
 const Review = require("../models/Review");
-const User = require("../models/User");
 const Ticket = require("../models/Ticket");
+const User = require("../models/User");
 const { groq, model } = require("../services/aiService");
 
 const reviewController = {
@@ -11,7 +11,6 @@ const reviewController = {
       const ticket = await Ticket.findById(ticketId);
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-      // If not a quick review, verify user ownership
       if (!isQuick && (!userId || ticket.userId.toString() !== userId)) {
         return res.status(400).json({ message: "Invalid ticket ownership" });
       }
@@ -20,10 +19,11 @@ const reviewController = {
         return res.status(400).json({ message: "Review already submitted" });
       }
 
-      let aiScore = 50; // Default
+      let aiScore = 50;
+      const safeComment = comment || "";
       const heuristicScore = Math.min(
         100,
-        rating * 7 + (comment.length > 20 ? 30 : 10),
+        rating * 7 + (safeComment.length > 20 ? 30 : 10),
       );
 
       if (groq) {
@@ -38,7 +38,7 @@ const reviewController = {
               },
               {
                 role: "user",
-                content: `Rating: ${rating}/10. Review: ${comment}`,
+                content: `Rating: ${rating}/10. Review: ${safeComment}`,
               },
             ],
             max_tokens: 5,
@@ -53,13 +53,15 @@ const reviewController = {
       } else {
         aiScore = heuristicScore;
       }
-      // Create and persist review
+
       const review = new Review({
-        userId: ticket.userId, // Use the user from the ticket
+        userId: ticket.userId,
         movieId: String(movieId || ticket.movieId),
         rating,
-        comment,
+        comment: safeComment,
         aiScore,
+        isVerifiedTicket: true,
+        commentType: "review",
       });
 
       await review.save();
@@ -75,11 +77,62 @@ const reviewController = {
     }
   },
 
+  submitDiscussion: async (req, res) => {
+    try {
+      const { movieId, displayName, comment, rating } = req.body;
+      const trimmedComment = comment?.trim();
+
+      if (!movieId || !trimmedComment) {
+        return res
+          .status(400)
+          .json({ message: "Movie ID and comment are required" });
+      }
+
+      let authorName = displayName?.trim() || "Cinema Fan";
+      let userId = null;
+
+      if (req.auth?.id && req.auth.role === "user") {
+        userId = req.auth.id;
+        const userDoc = await User.findById(userId).select("name");
+        if (userDoc?.name) {
+          authorName = displayName?.trim() || userDoc.name;
+        }
+      }
+
+      const numericRating = Math.min(10, Math.max(1, Number(rating) || 8));
+
+      const discussion = new Review({
+        userId: userId || undefined,
+        authorName,
+        movieId: String(movieId),
+        rating: numericRating,
+        comment: trimmedComment,
+        aiScore: 0,
+        isVerifiedTicket: false,
+        commentType: "discussion",
+      });
+
+      await discussion.save();
+      const populated = await Review.findById(discussion._id).populate(
+        "userId",
+        "name profilePicture",
+      );
+
+      res.status(201).json({ review: populated });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ message: "Could not post comment", error: err.message });
+    }
+  },
+
   getMovieReviews: async (req, res) => {
     try {
       const reviews = await Review.find({
-        movieId: req.params.movieId,
-      }).populate("userId", "name profilePicture");
+        movieId: String(req.params.movieId),
+      })
+        .populate("userId", "name profilePicture")
+        .sort({ createdAt: -1 });
       res.json(reviews);
     } catch (err) {
       res

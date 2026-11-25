@@ -55,13 +55,15 @@ app.use(express.urlencoded({ extended: true }));
 // SESSION
 // --------------------------------------------------
 
+const isHttpsFrontend = (process.env.FRONTEND_URL || "").startsWith("https://");
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production" && isHttpsFrontend,
       httpOnly: true,
       sameSite: "lax",
     },
@@ -151,6 +153,18 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+async function connectMongoWithRetry() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
+    });
+    console.log("Connected to MongoDB Atlas");
+  } catch (err) {
+    console.error("MongoDB connection error:", err.message);
+    console.warn("API running in degraded DB mode — movie discovery works; auth/DB routes will return 503 until MongoDB reconnects.");
+  }
+}
+
 async function startServer() {
   try {
     // Check required environment variables
@@ -166,29 +180,21 @@ async function startServer() {
       throw new Error("SESSION_SECRET is not configured");
     }
 
-    // Connect to MongoDB first
-    await mongoose.connect(process.env.MONGODB_URI);
-
-    console.log("Connected to MongoDB Atlas");
-
-    // Start Express server
+    // Start Express server first so health/movie routes & DB outage responses stay available
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`[v1.0.2] CineReward API is running on port ${PORT}`);
-
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-
       console.log(`Allowed origins: ${allowedOrigins.join(", ")}`);
-
-      // Start cron only after the server and database
-      // are successfully initialized.
-      require("./cron/reviewReminders");
-
-      console.log("Review reminder cron initialized");
     });
+
+    await connectMongoWithRetry();
+
+    if (mongoose.connection.readyState === 1) {
+      require("./cron/reviewReminders");
+      console.log("Review reminder cron initialized");
+    }
   } catch (error) {
     console.error("Failed to start CineReward API:", error);
-
-    // Exit so Render knows the service failed.
     process.exit(1);
   }
 }

@@ -11,25 +11,53 @@ const generateToken = (user) => {
   });
 };
 
+const formatUserResponse = (user) => ({
+  id: user._id,
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  phone: user.phone,
+  coins: user.coins || 0,
+  role: user.role || "user",
+  profilePicture: user.profilePicture || "",
+});
+
 const authController = {
   signup: async (req, res) => {
     try {
       const { name, username, email, password } = req.body;
-      const normalizedUsername = username?.trim().toLowerCase();
+      const trimmedName = name?.trim();
+      const normalizedUsername = username?.trim().toLowerCase() || undefined;
       const normalizedEmail = email?.trim().toLowerCase();
-      let user = await User.findOne({
+
+      if (!trimmedName || !normalizedEmail || !password) {
+        return res
+          .status(400)
+          .json({ message: "Name, email, and password are required" });
+      }
+      if (password.length < 6) {
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 6 characters" });
+      }
+
+      let existingUser = await User.findOne({
         $or: [
           { email: normalizedEmail },
           ...(normalizedUsername ? [{ username: normalizedUsername }] : []),
         ],
       });
-      if (user) return res.status(400).json({ message: "User already exists" });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ message: "An account with this email or username already exists" });
+      }
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      user = new User({
-        name,
+      const user = new User({
+        name: trimmedName,
         username: normalizedUsername,
         email: normalizedEmail,
         password: hashedPassword,
@@ -39,15 +67,14 @@ const authController = {
       const token = generateToken(user);
       res.status(201).json({
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          coins: user.coins,
-          role: user.role,
-        },
+        user: formatUserResponse(user),
       });
     } catch (err) {
+      if (err.code === 11000) {
+        return res
+          .status(400)
+          .json({ message: "An account with this email or username already exists" });
+      }
       res.status(500).json({ message: "Server error", error: err.message });
     }
   },
@@ -66,56 +93,59 @@ const authController = {
       const adminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
       const adminUsername =
         process.env.SUPER_ADMIN_USERNAME?.trim().toLowerCase();
+      const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
       const adminSecret = process.env.SUPER_ADMIN_SECRET_CODE?.trim();
 
-      if (
-        (normalizedIdentifier === adminEmail ||
-          normalizedIdentifier === adminUsername) &&
-        password === process.env.SUPER_ADMIN_PASSWORD &&
-        (!adminSecret || !/^\d{16}$/.test(adminSecret))
-      ) {
-        return res.status(503).json({
-          message:
-            "Super admin login is not configured. Add SUPER_ADMIN_SECRET_CODE with exactly 16 digits to backend/.env and restart the server.",
-        });
-      }
+      const matchesAdminIdentity = Boolean(
+        (adminEmail && normalizedIdentifier === adminEmail) ||
+          (adminUsername && normalizedIdentifier === adminUsername)
+      );
 
-      if (
-        (normalizedIdentifier === adminEmail ||
-          normalizedIdentifier === adminUsername) &&
-        password === process.env.SUPER_ADMIN_PASSWORD &&
-        (!secretKey ||
+      if (matchesAdminIdentity && adminPassword && password === adminPassword) {
+        if (!adminSecret || !/^\d{16}$/.test(adminSecret)) {
+          return res.status(503).json({
+            message:
+              "Super admin login is not configured. Add SUPER_ADMIN_SECRET_CODE with exactly 16 digits to backend/.env and restart the server.",
+          });
+        }
+
+        if (
+          !secretKey ||
           secretKey.trim() !== adminSecret ||
-          !/^\d{16}$/.test(secretKey.trim()))
-      ) {
-        return res.status(401).json({
-          message: "Admin login requires the correct 16-digit secret code",
-        });
-      }
+          !/^\d{16}$/.test(secretKey.trim())
+        ) {
+          return res.status(401).json({
+            message: "Admin login requires the correct 16-digit secret code",
+          });
+        }
 
-      if (
-        (normalizedIdentifier === adminEmail ||
-          normalizedIdentifier === adminUsername) &&
-        password === process.env.SUPER_ADMIN_PASSWORD
-      ) {
         const token = jwt.sign(
-          { role: "super_admin", username: loginIdentifier },
+          { role: "super_admin", username: adminUsername || loginIdentifier },
           process.env.JWT_SECRET,
-          { expiresIn: "7d" },
+          { expiresIn: "7d" }
         );
         return res.json({
           token,
           user: {
+            id: "super_admin",
             name: "Super Admin",
+            username: adminUsername || loginIdentifier,
             email: adminEmail || loginIdentifier,
             role: "super_admin",
           },
         });
       }
 
-      if (secretKey) {
-        const team = await MovieTeam.findOne({ email: normalizedIdentifier });
-        if (team && (await bcrypt.compare(password, team.password))) {
+      // Movie Team authentication check
+      const team = await MovieTeam.findOne({ email: normalizedIdentifier });
+      if (team) {
+        const teamPasswordMatches = await bcrypt.compare(password, team.password);
+        if (secretKey) {
+          if (!teamPasswordMatches) {
+            return res
+              .status(401)
+              .json({ message: "Invalid movie team credentials" });
+          }
           if (team.secretKey !== secretKey.trim()) {
             return res
               .status(401)
@@ -124,7 +154,7 @@ const authController = {
           const token = jwt.sign(
             { id: team._id, role: "movie_team" },
             process.env.JWT_SECRET,
-            { expiresIn: "7d" },
+            { expiresIn: "7d" }
           );
           return res.json({
             token,
@@ -137,41 +167,94 @@ const authController = {
               freeTicketsCount: team.freeTicketsCount,
             },
           });
-        }
-      } else {
-        const team = await MovieTeam.findOne({ email: normalizedIdentifier });
-        if (team && (await bcrypt.compare(password, team.password))) {
+        } else if (teamPasswordMatches) {
           return res
             .status(401)
             .json({ message: "Movie team login requires the secret key" });
         }
       }
 
+      // Regular User authentication
       const user = await User.findOne({
         $or: [
           { email: normalizedIdentifier },
           { username: normalizedIdentifier },
         ],
       });
-      if (!user || !user.password)
-        return res.status(401).json({ message: "Invalid login credentials" });
+      if (!user) {
+        return res
+          .status(401)
+          .json({ message: "Invalid email/username or password" });
+      }
+
+      if (!user.password) {
+        return res.status(401).json({
+          message:
+            "This account uses Google or Phone Sign-In. Please continue with Google or use Forgot Password to set a password.",
+        });
+      }
 
       const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch)
-        return res.status(400).json({ message: "Invalid credentials" });
+      if (!isMatch) {
+        return res
+          .status(401)
+          .json({ message: "Invalid email/username or password" });
+      }
 
       const token = generateToken(user);
       return res.json({
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          username: user.username,
-          email: user.email,
-          coins: user.coins,
-          role: user.role,
-        },
+        user: formatUserResponse(user),
       });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  },
+
+  me: async (req, res) => {
+    try {
+      if (!req.auth) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      if (req.auth.role === "super_admin") {
+        return res.json({
+          user: {
+            id: "super_admin",
+            name: "Super Admin",
+            username: req.auth.username || process.env.SUPER_ADMIN_USERNAME,
+            email:
+              process.env.SUPER_ADMIN_EMAIL ||
+              req.auth.username ||
+              "admin@cinereward.com",
+            role: "super_admin",
+          },
+        });
+      }
+
+      if (req.auth.role === "movie_team") {
+        const team = await MovieTeam.findById(req.auth.id).select("-password");
+        if (!team) {
+          return res.status(404).json({ message: "Movie team not found" });
+        }
+        return res.json({
+          user: {
+            id: team._id,
+            name: team.name,
+            email: team.email,
+            role: "movie_team",
+            assignedMovies: team.assignedMovies,
+            freeTicketsCount: team.freeTicketsCount,
+          },
+        });
+      }
+
+      const user = await User.findById(req.auth.id).select("-password");
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      return res.json({ user: formatUserResponse(user) });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
     }
@@ -180,17 +263,9 @@ const authController = {
   googleSuccess: (req, res) => {
     if (req.user) {
       const token = generateToken(req.user);
-      // In a real app, you might redirect to a frontend success page with the token
       res.json({
         token,
-        user: {
-          id: req.user._id,
-          name: req.user.name,
-          email: req.user.email,
-          coins: req.user.coins,
-          role: req.user.role,
-          profilePicture: req.user.profilePicture,
-        },
+        user: formatUserResponse(req.user),
       });
     } else {
       res.status(401).json({ message: "Google authentication failed" });
@@ -207,31 +282,21 @@ const authController = {
           .json({ message: "UID and Phone number are required" });
       }
 
-      // Check if user exists by phone or googleId (using uid as the identifier here)
       let user = await User.findOne({ $or: [{ phone }, { googleId: uid }] });
 
       if (user) {
-        // Login case
         const token = generateToken(user);
         return res.status(200).json({
           token,
-          user: {
-            id: user._id,
-            name: user.name,
-            phone: user.phone,
-            email: user.email,
-            coins: user.coins,
-            role: user.role,
-          },
+          user: formatUserResponse(user),
         });
       }
 
-      // Signup case: allow phone-only signups by creating a friendly default name when not provided
       const defaultName = name || `User${phone.slice(-4)}`;
       user = new User({
         name: defaultName,
         phone,
-        googleId: uid, // storing Firebase UID here
+        googleId: uid,
       });
 
       await user.save();
@@ -239,18 +304,10 @@ const authController = {
 
       return res.status(201).json({
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          phone: user.phone,
-          email: user.email,
-          coins: user.coins,
-          role: user.role,
-        },
+        user: formatUserResponse(user),
       });
     } catch (err) {
       console.error("Phone Auth Error:", err);
-      // Handle MongoDB Duplicate Key errors (E11000) specifically
       if (err.code === 11000) {
         return res.status(400).json({
           message:
@@ -266,9 +323,13 @@ const authController = {
 
   forgotPassword: async (req, res) => {
     try {
-      const { email } = req.body;
-      const user = await User.findOne({ email });
-      if (!user) return res.status(404).json({ message: "User not found" });
+      const normalizedEmail = req.body?.email?.trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "Email address is required" });
+      }
+
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user) return res.status(404).json({ message: "No account found with that email" });
 
       const token = crypto.randomBytes(20).toString("hex");
       user.resetPasswordToken = token;
@@ -280,7 +341,17 @@ const authController = {
       ).replace(/\/$/, "");
       const resetUrl = `${frontendUrl}/reset-password/${token}`;
 
-      await emailService.sendPasswordResetEmail(user.email, resetUrl);
+      const emailSent = await emailService.sendPasswordResetEmail(
+        user.email,
+        resetUrl
+      );
+      if (!emailSent) {
+        return res.status(503).json({
+          message:
+            "Password reset email could not be delivered right now. Please check email server configuration.",
+        });
+      }
+
       res.json({ message: "Password reset link sent to your email" });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
@@ -290,6 +361,12 @@ const authController = {
   resetPassword: async (req, res) => {
     try {
       const { token, password } = req.body;
+      if (!token || !password || password.length < 6) {
+        return res.status(400).json({
+          message: "Valid token and password (minimum 6 characters) are required",
+        });
+      }
+
       const user = await User.findOne({
         resetPasswordToken: token,
         resetPasswordExpires: { $gt: Date.now() },

@@ -13,26 +13,59 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { getActiveSession } from "../utils/auth";
 
 const MovieTeamDashboard = () => {
-  const [team] = useState(() => JSON.parse(localStorage.getItem("team")));
+  const [session] = useState(() => getActiveSession());
+  const [teamsList, setTeamsList] = useState([]);
+  const [activeTeam, setActiveTeam] = useState(() =>
+    session?.role === "movie_team" ? session.data : null
+  );
   const [selectedMovie, setSelectedMovie] = useState("");
   const [data, setData] = useState({
     ticketCount: 0,
     recentReviews: [],
     pastReviewers: [],
+    freeTicketsCount: 0,
   });
   const [loading, setLoading] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [isAwarding, setIsAwarding] = useState(null); // Track specific review being awarded
+  const [isAwarding, setIsAwarding] = useState(null);
   const winnersRef = React.useRef(null);
   const navigate = useNavigate();
 
+  // If super_admin opens /team/dashboard, fetch all teams so they can inspect any team
+  useEffect(() => {
+    if (session?.role === "super_admin") {
+      axios
+        .get("/api/admin/teams")
+        .then((res) => {
+          const list = Array.isArray(res.data) ? res.data : [];
+          setTeamsList(list);
+          if (list.length > 0 && !activeTeam) {
+            setActiveTeam({ ...list[0], id: list[0]._id });
+          }
+        })
+        .catch((err) => console.error("Failed loading teams for admin:", err));
+    }
+  }, [session?.role, activeTeam]);
+
+  useEffect(() => {
+    if (activeTeam?.assignedMovies?.length > 0) {
+      setSelectedMovie(activeTeam.assignedMovies[0]);
+    } else {
+      setSelectedMovie("");
+    }
+  }, [activeTeam]);
+
+  const activeTeamId = activeTeam?.id || activeTeam?._id;
+
   const fetchMovieStats = useCallback(async () => {
+    if (!selectedMovie || !activeTeamId) return;
     setLoading(true);
     try {
       const res = await axios.get(
-        `/api/admin/team/dashboard/${selectedMovie}?teamId=${team.id}`,
+        `/api/admin/team/dashboard/${selectedMovie}?teamId=${activeTeamId}`
       );
       setData(res.data);
     } catch (err) {
@@ -40,34 +73,27 @@ const MovieTeamDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedMovie, team]);
+  }, [selectedMovie, activeTeamId]);
 
   useEffect(() => {
-    if (team && team.assignedMovies.length > 0) {
-      setSelectedMovie(team.assignedMovies[0]);
-    }
-  }, [team]);
-
-  useEffect(() => {
-    if (selectedMovie) {
+    if (selectedMovie && activeTeamId) {
       fetchMovieStats();
     }
-  }, [selectedMovie, fetchMovieStats]);
+  }, [selectedMovie, activeTeamId, fetchMovieStats]);
 
   const selectAiWinners = async () => {
-    if (!selectedMovie) return;
+    if (!selectedMovie || !activeTeamId) return;
     setIsAiProcessing(true);
     try {
       await axios.post("/api/admin/team/select-winners", {
         movieId: selectedMovie,
-        teamId: team.id,
+        teamId: activeTeamId,
       });
       await fetchMovieStats();
       setTimeout(() => {
         winnersRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 500);
+      }, 400);
     } catch (err) {
-      console.error(err);
       alert(err.response?.data?.message || "AI Winner Selection failed.");
     } finally {
       setIsAiProcessing(false);
@@ -75,17 +101,16 @@ const MovieTeamDashboard = () => {
   };
 
   const awardIndividual = async (reviewId) => {
-    if (!team.id) return;
+    if (!activeTeamId) return;
     setIsAwarding(reviewId);
     try {
       await axios.post("/api/admin/team/award-individual", {
         reviewId,
-        teamId: team.id,
+        teamId: activeTeamId,
       });
       await fetchMovieStats();
       alert("Successfully awarded 100 coins!");
     } catch (err) {
-      console.error(err);
       alert(err.response?.data?.message || "Failed to award coins.");
     } finally {
       setIsAwarding(null);
@@ -93,68 +118,87 @@ const MovieTeamDashboard = () => {
   };
 
   const updateTicketCount = async () => {
-    const count = prompt(
-      "Enter new free tickets count:",
-      data.freeTicketsCount,
-    );
+    const count = prompt("Enter free tickets / reward quota:", data.freeTicketsCount);
     if (count === null) return;
     try {
       await axios.post("/api/admin/team/update-tickets", {
-        teamId: team.id,
-        count: parseInt(count),
+        teamId: activeTeamId,
+        count: parseInt(count, 10) || 0,
       });
       fetchMovieStats();
-    } catch (err) {
+    } catch {
       alert("Update failed");
     }
   };
 
-  if (!team)
+  if (!activeTeam && session?.role !== "super_admin") {
     return (
       <div className="text-center py-20 text-white">Unauthorized Access.</div>
     );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 md:py-14">
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-primary/10 border border-white/10 rounded-3xl p-6 md:p-8 mb-8 relative overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-primary/15 blur-3xl" />
-        <div className="relative flex flex-col md:flex-row justify-between items-start gap-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 mb-8 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-6">
           <div className="flex items-center gap-4">
             <button
+              type="button"
               onClick={() => navigate(-1)}
-              className="p-3 bg-slate-900 border border-slate-800 rounded-2xl hover:border-primary transition-all text-slate-400 hover:text-white"
-              title="Go to Previous Movies"
+              className="w-10 h-10 rounded-xl glass-button flex items-center justify-center"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <h1 className="text-4xl font-black text-white italic tracking-tighter">
-                MOVIE<span className="text-primary">TEAM</span> HUB
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                Movie Team Hub
               </h1>
-              <p className="text-slate-400 font-medium">
-                Manage reviews, rewards, and ticket capacity for {team.name}.
+              <p className="text-slate-400 text-xs mt-1">
+                Manage AI-scored reviews &amp; coin rewards for{" "}
+                <span className="text-white font-semibold">
+                  {activeTeam?.name || "Team"}
+                </span>
               </p>
-              <div className="flex items-center gap-2 mt-3 text-[10px] font-black uppercase tracking-widest text-emerald-300">
-                <ShieldCheck className="w-4 h-4" /> Team workspace secured
+              <div className="flex items-center gap-1.5 mt-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                <ShieldCheck className="w-3.5 h-3.5" /> Workspace Authenticated
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+            {teamsList.length > 0 && (
+              <select
+                value={activeTeamId || ""}
+                onChange={(e) => {
+                  const found = teamsList.find((t) => t._id === e.target.value);
+                  if (found) setActiveTeam({ ...found, id: found._id });
+                }}
+                className="bg-[#14141e] border border-white/[0.1] text-white py-3 px-4 rounded-xl text-xs font-bold"
+              >
+                {teamsList.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
+              type="button"
               onClick={updateTicketCount}
-              className="bg-slate-900 border border-slate-800 text-white px-6 rounded-2xl font-bold hover:border-primary transition-all text-sm"
+              className="glass-button px-5 py-3 rounded-xl text-xs font-bold"
             >
-              Manage Tickets ({data.freeTicketsCount || 0})
+              Reward Quota ({data.freeTicketsCount || 0})
             </button>
-            <div className="relative flex-grow md:w-64">
-              <Film className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+
+            <div className="relative min-w-[200px]">
+              <Film className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ff2e3b]" />
               <select
                 value={selectedMovie}
                 onChange={(e) => setSelectedMovie(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 text-white py-4 pl-12 pr-4 rounded-2xl focus:outline-none focus:border-primary appearance-none font-bold"
+                className="w-full bg-[#14141e] border border-white/[0.1] text-white py-3 pl-10 pr-4 rounded-xl focus:outline-none focus:border-[#e50914] text-xs font-bold"
               >
-                {team.assignedMovies.map((mid) => (
+                {(activeTeam?.assignedMovies || []).map((mid) => (
                   <option key={mid} value={mid}>
                     Movie ID: {mid}
                   </option>
@@ -165,18 +209,12 @@ const MovieTeamDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          [
-            Ticket,
-            "Bookings",
-            data.ticketCount,
-            "text-cyan-300",
-            "bg-cyan-400/10",
-          ],
+          [Ticket, "Bookings", data.ticketCount, "text-cyan-300", "bg-cyan-400/10"],
           [
             MessageSquare,
-            "Recent reviews",
+            "Pending Reviews",
             data.recentReviews.length,
             "text-amber-300",
             "bg-amber-400/10",
@@ -190,24 +228,19 @@ const MovieTeamDashboard = () => {
           ],
           [
             Sparkles,
-            "AI queue",
-            data.recentReviews.filter((review) => !review.isWinner).length,
-            "text-primary-light",
-            "bg-primary/10",
+            "AI Queue",
+            data.recentReviews.filter((r) => !r.isWinner).length,
+            "text-[#ff2e3b]",
+            "bg-[#e50914]/15",
           ],
         ].map(([Icon, label, value, color, background]) => (
-          <div
-            key={label}
-            className="bg-slate-900/80 border border-white/10 rounded-2xl p-5 flex items-center gap-4"
-          >
-            <div
-              className={`w-11 h-11 rounded-xl ${background} flex items-center justify-center`}
-            >
+          <div key={label} className="glass-card rounded-2xl p-5 flex items-center gap-4">
+            <div className={`w-11 h-11 rounded-xl ${background} flex items-center justify-center`}>
               <Icon className={`w-5 h-5 ${color}`} />
             </div>
             <div>
-              <p className="text-2xl font-black text-white">{value}</p>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <p className="text-2xl font-extrabold text-white">{value}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {label}
               </p>
             </div>
@@ -215,216 +248,153 @@ const MovieTeamDashboard = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2rem] text-center hover:border-primary/30 transition-all">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <TrendingUp className="w-8 h-8 text-primary" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-5">
+          <div className="glass-card rounded-3xl p-7 text-center">
+            <div className="w-12 h-12 bg-[#e50914]/15 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <TrendingUp className="w-6 h-6 text-[#ff2e3b]" />
             </div>
-            <p className="text-slate-500 text-xs font-black uppercase tracking-widest mb-1">
-              Impact Factor
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">
+              Average Rating
             </p>
-            <p className="text-5xl font-black text-white tracking-tighter">
+            <p className="text-4xl font-black text-white">
               {data.recentReviews.length + data.pastReviewers.length > 0
                 ? (
-                    (data.recentReviews.reduce(
-                      (acc, r) => acc + (r.rating || 0),
-                      0,
-                    ) +
-                      data.pastReviewers.reduce(
-                        (acc, r) => acc + (r.rating || 0),
-                        0,
-                      )) /
+                    (data.recentReviews.reduce((acc, r) => acc + (r.rating || 0), 0) +
+                      data.pastReviewers.reduce((acc, r) => acc + (r.rating || 0), 0)) /
                     (data.recentReviews.length + data.pastReviewers.length)
                   ).toFixed(1)
                 : "0.0"}
             </p>
-            <p className="text-[10px] text-green-500 font-bold uppercase mt-4">
-              Based on {data.recentReviews.length + data.pastReviewers.length}{" "}
-              total reviews
-            </p>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2rem] text-center">
-            <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-blue-500" />
+          <div className="glass-card rounded-3xl p-7 text-center">
+            <div className="w-12 h-12 bg-blue-500/15 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Users className="w-6 h-6 text-blue-400" />
             </div>
-            <p className="text-slate-500 text-xs font-black uppercase tracking-widest mb-1">
-              Total Bookings
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">
+              Verified Bookings
             </p>
-            <p className="text-5xl font-black text-white tracking-tighter">
-              {data.ticketCount}
-            </p>
+            <p className="text-4xl font-black text-white">{data.ticketCount}</p>
           </div>
         </div>
 
-        <div className="lg:col-span-2">
-          <div className="bg-slate-900 border border-slate-800 rounded-[2rem] overflow-hidden">
-            <div className="p-8 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-              <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-500" /> Recent Reviews
-              </h3>
-              <div className="flex gap-3">
-                <button
-                  onClick={selectAiWinners}
-                  disabled={isAiProcessing || data.recentReviews.length === 0}
-                  className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all bg-primary hover:bg-primary-dark text-white disabled:opacity-50`}
-                >
-                  {isAiProcessing ? "Analyzing..." : "Pick winners (AI)"}
-                </button>
-                <span className="text-slate-500 text-xs font-bold self-center">
-                  {data.recentReviews.length} recent
-                </span>
-              </div>
+        <div className="lg:col-span-2 space-y-8">
+          <div className="glass-card rounded-3xl overflow-hidden">
+            <div className="p-6 border-b border-white/[0.08] flex flex-wrap justify-between items-center gap-4">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Recent Verified Reviews
+              </h2>
+              <button
+                type="button"
+                onClick={selectAiWinners}
+                disabled={isAiProcessing || data.recentReviews.length === 0}
+                className="btn-crimson px-5 py-2 rounded-xl text-xs disabled:opacity-50"
+              >
+                {isAiProcessing ? "AI Analyzing..." : "Pick Winners (AI)"}
+              </button>
             </div>
 
-            <div className="divide-y divide-slate-800">
+            <div className="divide-y divide-white/[0.06]">
               {data.recentReviews.map((review) => (
-                <div
-                  key={review._id}
-                  className="p-8 hover:bg-slate-800/30 transition-all group"
-                >
-                  <div className="flex justify-between items-start mb-4">
+                <div key={review._id} className="p-6 hover:bg-white/[0.02] transition-all">
+                  <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-slate-950 rounded-full flex items-center justify-center text-xs font-black text-primary border border-slate-800 overflow-hidden">
-                        {review.userId.profilePicture ? (
+                      <div className="w-9 h-9 bg-[#e50914]/20 rounded-full flex items-center justify-center text-xs font-bold text-white border border-white/10 overflow-hidden">
+                        {review.userId?.profilePicture ? (
                           <img
                             src={review.userId.profilePicture}
                             alt=""
                             className="w-full h-full object-cover"
                           />
-                        ) : review.userId.name ? (
-                          review.userId.name[0]
                         ) : (
-                          "U"
+                          review.userId?.name?.[0] || "U"
                         )}
                       </div>
                       <div>
-                        <h4 className="text-white font-bold text-sm">
-                          {review.userId.name}
-                        </h4>
-                        <p className="text-[10px] text-slate-500 font-bold">
-                          {review.userId.email}
+                        <h3 className="text-white font-semibold text-sm">
+                          {review.userId?.name || "Verified Reviewer"}
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          {review.userId?.email || ""}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
-                      <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                      <span className="text-yellow-500 font-black text-xs">
-                        {review.rating}/10
-                      </span>
-                    </div>
+                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 fill-amber-400" />
+                      {review.rating}/10
+                    </span>
                   </div>
-                  <p className="text-slate-400 text-sm leading-relaxed mb-6 italic">
+
+                  <p className="text-slate-300 text-xs leading-relaxed mb-4 italic">
                     &quot;{review.comment}&quot;
                   </p>
 
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-wrap justify-between items-center gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
                         AI Relevance
                       </span>
-                      <div className="w-32 h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                      <div className="w-28 h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-primary"
-                          style={{ width: `${review.aiScore}%` }}
-                        ></div>
+                          className="h-full bg-[#e50914]"
+                          style={{ width: `${review.aiScore || 50}%` }}
+                        />
                       </div>
-                      <span className="text-xs font-black text-primary">
-                        {review.aiScore}%
+                      <span className="text-xs font-bold text-[#ff2e3b]">
+                        {review.aiScore || 50}%
                       </span>
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => awardIndividual(review._id)}
                       disabled={isAwarding === review._id}
-                      className="opacity-0 group-hover:opacity-100 transition-all bg-green-500/10 text-green-500 border border-green-500/30 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-green-500 hover:text-white disabled:opacity-50"
+                      className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 hover:bg-emerald-500 hover:text-white transition-all"
                     >
-                      {isAwarding === review._id ? (
-                        <div className="w-3 h-3 border border-white/20 border-t-white rounded-full animate-spin"></div>
-                      ) : (
-                        <Award className="w-4 h-4" />
-                      )}
-                      AWARD 100 COINS
+                      <Award className="w-3.5 h-3.5" />
+                      <span>Award 100 Coins</span>
                     </button>
                   </div>
                 </div>
               ))}
 
               {loading && (
-                <div className="py-20 text-center text-slate-600">
-                  <div className="w-8 h-8 mx-auto mb-4 border-2 border-slate-700 border-t-primary rounded-full animate-spin"></div>
-                  <p className="font-bold">Loading reviews...</p>
+                <div className="py-12 text-center text-xs text-slate-400">
+                  Loading reviews...
                 </div>
               )}
 
               {!loading && data.recentReviews.length === 0 && (
-                <div className="py-20 text-center text-slate-600">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                  <p className="font-bold">No new reviews to show</p>
+                <div className="py-12 text-center text-xs text-slate-500">
+                  No new verified reviews to evaluate yet.
                 </div>
               )}
             </div>
           </div>
 
-          {/* Past Winners Section */}
           {data.pastReviewers.length > 0 && (
-            <div ref={winnersRef} className="mt-12 scroll-mt-12">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center">
-                  <Award className="w-6 h-6 text-green-500" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">
-                    Past Reviewers
-                  </h3>
-                  <p className="text-slate-500 text-xs font-bold">
-                    Successfully rewarded with coins
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+            <div ref={winnersRef}>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5 text-emerald-400" /> Rewarded Winners
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {data.pastReviewers.map((winner) => (
                   <div
                     key={winner._id}
-                    className="bg-slate-900 border border-green-500/20 p-6 rounded-3xl relative overflow-hidden group hover:border-green-500/40 transition-all"
+                    className="glass-card border-emerald-500/20 rounded-2xl p-5"
                   >
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-all">
-                      <Award className="w-16 h-16 text-green-500" />
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-bold text-white">
+                        {winner.userId?.name || "Winner"}
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/15 px-2.5 py-0.5 rounded-full">
+                        +100 Coins
+                      </span>
                     </div>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-slate-950 rounded-full flex items-center justify-center text-sm font-black text-green-500 border border-green-500/20 overflow-hidden">
-                        {winner.userId?.profilePicture ? (
-                          <img
-                            src={winner.userId.profilePicture}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
-                        ) : winner.userId?.name ? (
-                          winner.userId.name[0]
-                        ) : (
-                          "U"
-                        )}
-                      </div>
-                      <div className="max-w-[150px]">
-                        <h4 className="text-white font-bold truncate">
-                          {winner.userId?.name || "User"}
-                        </h4>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block truncate">
-                          {winner.userId?.email || "No Email"}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-slate-400 text-xs italic leading-relaxed border-l-2 border-green-500/30 pl-4 py-1 line-clamp-2">
+                    <p className="text-xs text-slate-400 italic line-clamp-2">
                       &quot;{winner.comment}&quot;
                     </p>
-                    <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
-                      <Star className="w-3 h-3 text-yellow-500" />
-                      <span>{winner.rating}/10</span>
-                      <span className="mx-1">•</span>
-                      <span className="text-green-500">Rewarded</span>
-                    </div>
                   </div>
                 ))}
               </div>

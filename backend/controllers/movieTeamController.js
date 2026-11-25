@@ -83,7 +83,10 @@ const movieTeamController = {
         });
       }
 
-      const reviews = await Review.find({ movieId }).populate("userId");
+      const reviews = await Review.find({
+        movieId: String(movieId),
+        commentType: { $ne: "discussion" },
+      }).populate("userId");
       if (reviews.length === 0)
         return res.status(400).json({ message: "No reviews found" });
 
@@ -260,6 +263,7 @@ const movieTeamController = {
       });
       const reviews = await Review.find({
         movieId: { $in: [movieId, Number(movieId), String(movieId)] },
+        commentType: { $ne: "discussion" },
       }).populate("userId", "name email profilePicture");
 
       // Separate into recent (not winners) and past (winners)

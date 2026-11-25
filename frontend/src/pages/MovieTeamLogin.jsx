@@ -1,61 +1,69 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { Key, Film, Shield, Mail, Lock } from "lucide-react";
+import { Key, Film, Shield, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { saveRoleSession } from "../utils/auth";
 
 const MovieTeamLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [secretKey, setSecretKey] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
       const res = await axios.post("/api/admin/team/login", {
-        email,
+        email: email.trim(),
         password,
-        secretKey,
+        secretKey: secretKey.trim(),
       });
-      localStorage.setItem("team", JSON.stringify(res.data));
-      navigate("/team/dashboard");
+      saveRoleSession("movie_team", res.data, res.data.token);
+      navigate("/team/dashboard", { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+      setError(err.response?.data?.message || "Team login failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950">
-      <div className="bg-slate-900 border border-slate-800 p-12 rounded-[3.5rem] w-full max-w-lg shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-
-        <div className="text-center mb-10">
-          <Film className="w-16 h-16 text-primary mx-auto mb-4" />
-          <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase mb-2">
+    <div className="min-h-[85vh] flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="glass-panel rounded-3xl p-8 sm:p-10 w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-[#e50914]/15 border border-[#e50914]/30 flex items-center justify-center mx-auto mb-4">
+            <Film className="w-7 h-7 text-[#ff2e3b]" />
+          </div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
             Movie Team Access
-          </h2>
-          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest">
-            Restricted Internal Environment
+          </h1>
+          <p className="text-slate-400 text-xs mt-1">
+            Review campaign &amp; reward management portal
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-4 rounded-xl mb-8 text-sm font-bold text-center">
+          <div className="bg-red-500/10 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl mb-6 text-xs font-medium text-center">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div className="space-y-2 pl-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
               Team Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary" />
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="email"
-                className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-primary transition-all font-bold"
+                className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl py-3.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-[#e50914] transition-all"
                 placeholder="team@cinereward.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -64,48 +72,70 @@ const MovieTeamLogin = () => {
             </div>
           </div>
 
-          <div className="space-y-2 pl-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
               Team Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary" />
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
-                type="password"
-                className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-primary transition-all font-bold"
+                type={showPassword ? "text" : "password"}
+                className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white focus:outline-none focus:border-[#e50914] transition-all"
                 placeholder="Team password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
-          <div className="space-y-2 pl-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pl-1">
               Secret Vault Key
             </label>
             <div className="relative">
-              <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary" />
+              <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
-                type="password"
-                className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-primary transition-all font-bold"
-                placeholder="CX-889-442"
+                type={showKey ? "text" : "password"}
+                className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl py-3.5 pl-10 pr-11 text-sm text-white focus:outline-none focus:border-[#e50914] transition-all"
+                placeholder="CR-XXXXXXXX"
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full bg-primary hover:bg-primary-dark text-white font-black py-5 rounded-3xl transition-all shadow-2xl shadow-primary/20 mt-8 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
+            disabled={loading}
+            className="w-full btn-crimson py-3.5 rounded-xl mt-2 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
           >
-            <Shield className="w-5 h-5" />
-            <span>Initialize Hub</span>
+            <Shield className="w-4 h-4" />
+            <span>{loading ? "Verifying..." : "Enter Team Hub"}</span>
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Looking for regular login?{" "}
+          <Link to="/login" className="text-[#ff2e3b] hover:underline font-semibold">
+            Unified Sign In
+          </Link>
+        </p>
       </div>
     </div>
   );

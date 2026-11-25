@@ -1,160 +1,725 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Link } from 'react-router-dom';
-import { Star, ThumbsUp, ChevronRight } from 'lucide-react';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Play,
+  Info,
+  Plus,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Star,
+  Coins,
+  Film,
+  Sparkles,
+  Ticket,
+  Tv,
+  Globe,
+  ShieldCheck,
+  Layers,
+  Zap,
+  Calendar,
+  Award,
+} from "lucide-react";
+import LoadingSpinner from "../components/LoadingSpinner";
+import MovieCard from "../components/MovieCard";
+import { resolveMoviePoster } from "../utils/media";
+import { isInWatchlist, toggleWatchlist } from "../utils/watchlist";
+
+const BROWSE_CATEGORIES = [
+  {
+    title: "Bollywood Movies",
+    desc: "Latest Hindi cinema — action, drama, comedy & blockbusters.",
+    to: "/catalog?section=bollywood",
+    icon: Film,
+  },
+  {
+    title: "Hollywood Movies",
+    desc: "Global hits in English, IMAX formats & franchise epics.",
+    to: "/catalog?section=hollywood",
+    icon: Sparkles,
+  },
+  {
+    title: "South Indian",
+    desc: "Tamil, Telugu, Malayalam & Kannada pan-India releases.",
+    to: "/catalog?section=south-indian",
+    icon: Zap,
+  },
+  {
+    title: "Web Series & Shows",
+    desc: "Top rated series powered by TMDB & TVMaze live APIs.",
+    to: "/catalog?section=shows",
+    icon: Tv,
+  },
+  {
+    title: "Anime & Studio Ghibli",
+    desc: "Spirited Away, anime adventures & animated masterpieces.",
+    to: "/catalog?section=anime",
+    icon: Star,
+  },
+  {
+    title: "Korean Cinema",
+    desc: "K-dramas, acclaimed Korean thrillers & festival winners.",
+    to: "/catalog?section=korean",
+    icon: Globe,
+  },
+];
+
+const FEATURE_LIST = [
+  {
+    title: "Bollywood & Hollywood",
+    desc: "Latest theatrical releases — from blockbusters to indie gems.",
+    icon: Film,
+  },
+  {
+    title: "Instant Seat Booking",
+    desc: "Interactive cinema seat maps with Razorpay & coin checkout.",
+    icon: Ticket,
+  },
+  {
+    title: "Curated Collections",
+    desc: "Marvel, DC, Studio Ghibli, Fast & Furious & Indian epics.",
+    icon: Layers,
+  },
+  {
+    title: "AI Review Rewards",
+    desc: "Write genuine reviews and win 100+ coins per selection.",
+    icon: Award,
+  },
+  {
+    title: "Live Events & Partners",
+    desc: "Host shows, film festivals & track partner inquiries live.",
+    icon: Calendar,
+  },
+];
+
+const WHY_CHOOSE = [
+  {
+    title: "Multi-API Discovery",
+    desc: "Real-time cinema catalogs powered by TMDB, TVMaze, Studio Ghibli & OMDb.",
+    icon: Globe,
+  },
+  {
+    title: "Seamless Seat Booking",
+    desc: "Pick seats, showtimes & pay via Razorpay or earned CineReward coins.",
+    icon: Ticket,
+  },
+  {
+    title: "AI-Scored Rewards",
+    desc: "Verified ticket holders earn coins for thoughtful movie reviews.",
+    icon: Sparkles,
+  },
+  {
+    title: "Daily Live Updates",
+    desc: "Now playing, trending charts & top series updated automatically.",
+    icon: ShieldCheck,
+  },
+];
+
+const CarouselSection = ({ eyebrow = "YOUR NEXT DISCOVERY", title, viewAllTo, items = [] }) => {
+  const scrollRef = useRef(null);
+
+  if (!items || items.length === 0) return null;
+
+  const scroll = (dir) => {
+    if (!scrollRef.current) return;
+    const amount = Math.max(480, scrollRef.current.clientWidth * 0.75);
+    scrollRef.current.scrollBy({ left: dir * amount, behavior: "smooth" });
+  };
+
+  return (
+    <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-7">
+      <div className="flex items-end justify-between gap-4 mb-5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500 mb-1">
+            {eyebrow}
+          </p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            {title}
+          </h2>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Link
+            to={viewAllTo}
+            className="text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1 mr-1 transition-colors"
+          >
+            <span>View all</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => scroll(-1)}
+            aria-label={`Scroll ${title} left`}
+            className="w-8 h-8 rounded-full glass-button flex items-center justify-center"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scroll(1)}
+            aria-label={`Scroll ${title} right`}
+            className="w-8 h-8 rounded-full glass-button flex items-center justify-center"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-2"
+      >
+        {items.map((movie) => (
+          <div
+            key={movie.id}
+            className="w-[155px] sm:w-[175px] md:w-[190px] lg:w-[205px] shrink-0"
+          >
+            <MovieCard movie={movie} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+const LeaderboardCard = ({ eyebrow, title, viewAllTo, items = [] }) => {
+  const [, setTick] = useState(0);
+
+  const handleToggle = (item) => {
+    toggleWatchlist(item);
+    setTick((t) => t + 1);
+  };
+
+  return (
+    <div className="glass-card rounded-3xl p-6 sm:p-7">
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-1">
+            {eyebrow}
+          </p>
+          <h3 className="text-xl font-bold text-white tracking-tight">{title}</h3>
+        </div>
+        <Link
+          to={viewAllTo}
+          className="text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1 mt-1"
+        >
+          <span>View all</span>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
+      <div className="divide-y divide-white/[0.06]">
+        {items.slice(0, 6).map((item, idx) => {
+          const saved = isInWatchlist(item.id);
+          return (
+            <div
+              key={item.id}
+              className="py-3 flex items-center justify-between gap-3 group"
+            >
+              <Link
+                to={`/movie/${item.id}`}
+                className="flex items-center gap-3.5 min-w-0 flex-grow"
+              >
+                <span className="w-7 text-lg font-extrabold text-slate-600 group-hover:text-slate-400 tabular-nums shrink-0">
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+                <img
+                  src={resolveMoviePoster(item.poster_path, item.id)}
+                  alt={item.title}
+                  className="w-10 h-14 object-cover rounded-lg border border-white/10 shrink-0"
+                />
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-white group-hover:text-[#ff2e3b] transition-colors truncate">
+                    {item.title}
+                  </h4>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                    <span>{item.year || item.release_date?.slice(0, 4) || "2026"}</span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                      <Star className="w-3 h-3 fill-amber-400" />
+                      {Number(item.vote_average || 0).toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => handleToggle(item)}
+                title={saved ? "In Watchlist" : "Add to Watchlist"}
+                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                  saved
+                    ? "bg-[#e50914] text-white"
+                    : "text-slate-400 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                {saved ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const Home = () => {
-  const [movies, setMovies] = useState([]);
+  const [feed, setFeed] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [error, setError] = useState(null);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [, setWatchTick] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchMovies = async () => {
+    const loadHome = async () => {
       try {
         setLoading(true);
-        const res = await axios.get('/api/movies/popular');
-        const filteredMovies = Array.isArray(res.data) ? res.data.filter(m => m.poster_path) : [];
-        setMovies(filteredMovies);
-        setError(null);
+        const res = await axios.get("/api/movies/home");
+        setFeed(res.data);
       } catch (err) {
-        console.error('Error fetching now playing movies:', err);
-        setError('Failed to load movies. Showing recommendations.');
-        // If API fails completely, use robust local fallback to keep the app workable
-        setMovies([
-          { id: 101, title: 'Red Lorry Film Festival 2026', poster_path: 'https://picsum.photos/seed/101/400/600', vote_average: 9.2, vote_count: 5900, popularity: 850, release_date: '2026-03-12' },
-          { id: 102, title: 'The Kerala Story 2: Goes Beyond', poster_path: 'https://picsum.photos/seed/102/400/600', vote_average: 9.2, vote_count: 19500, popularity: 920, release_date: '2026-03-10' },
-          { id: 103, title: 'Dhurandhar The Revenge', poster_path: 'https://picsum.photos/seed/103/400/600', vote_average: 8.8, vote_count: 513000, popularity: 780, release_date: '2026-03-08' },
-          { id: 104, title: 'Hoppers', poster_path: 'https://picsum.photos/seed/104/400/600', vote_average: 9.2, vote_count: 2300, popularity: 650, release_date: '2026-03-05' },
-          { id: 105, title: 'O\' Romeo', poster_path: 'https://picsum.photos/seed/105/400/600', vote_average: 8.5, vote_count: 157000, popularity: 880, release_date: '2026-03-01' },
-          { id: 106, title: 'The Fall Guy', poster_path: 'https://picsum.photos/seed/106/400/600', vote_average: 7.8, vote_count: 1200, popularity: 450, release_date: '2026-05-03' },
-          { id: 107, title: 'Kingdom of the Planet of the Apes', poster_path: 'https://picsum.photos/seed/107/400/600', vote_average: 8.2, vote_count: 3400, popularity: 950, release_date: '2026-05-10' },
-          { id: 108, title: 'Challengers', poster_path: 'https://picsum.photos/seed/108/400/600', vote_average: 7.5, vote_count: 800, popularity: 300, release_date: '2026-04-26' },
-          { id: 109, title: 'Furiosa: A Mad Max Saga', poster_path: 'https://picsum.photos/seed/109/400/600', vote_average: 8.9, vote_count: 6700, popularity: 1200, release_date: '2026-05-24' },
-          { id: 110, title: 'IF', poster_path: 'https://picsum.photos/seed/110/400/600', vote_average: 7.0, vote_count: 1500, popularity: 500, release_date: '2026-05-17' },
-          { id: 111, title: 'Civil War', poster_path: 'https://picsum.photos/seed/111/400/600', vote_average: 8.1, vote_count: 4500, popularity: 800, release_date: '2026-04-12' },
-          { id: 112, title: 'The Garfield Movie', poster_path: 'https://picsum.photos/seed/112/400/600', vote_average: 6.5, vote_count: 2100, popularity: 600, release_date: '2026-05-24' },
-          { id: 113, title: 'Kalki 2898 AD', poster_path: 'https://picsum.photos/seed/113/400/600', vote_average: 9.5, vote_count: 85000, popularity: 2000, release_date: '2026-06-27' },
-          { id: 114, title: 'Inside Out 2', poster_path: 'https://picsum.photos/seed/114/400/600', vote_average: 8.8, vote_count: 15000, popularity: 1500, release_date: '2026-06-14' },
-          { id: 115, title: 'Deadpool & Wolverine', poster_path: 'https://picsum.photos/seed/115/400/600', vote_average: 9.8, vote_count: 250000, popularity: 3000, release_date: '2026-07-26' },
-          { id: 116, title: 'Pushpa 2: The Rule', poster_path: 'https://picsum.photos/seed/116/400/600', vote_average: 9.6, vote_count: 120000, popularity: 2500, release_date: '2026-08-15' },
-          { id: 117, title: 'Joker: Folie à Deux', poster_path: 'https://picsum.photos/seed/117/400/600', vote_average: 8.4, vote_count: 9000, popularity: 1100, release_date: '2026-10-04' },
-          { id: 118, title: 'Moana 2', poster_path: 'https://picsum.photos/seed/118/400/600', vote_average: 8.0, vote_count: 4000, popularity: 850, release_date: '2026-11-27' },
-          { id: 119, title: 'Sonic the Hedgehog 3', poster_path: 'https://picsum.photos/seed/119/400/600', vote_average: 7.9, vote_count: 5000, popularity: 900, release_date: '2026-12-20' },
-          { id: 120, title: 'Interstellar (Re-release)', poster_path: 'https://picsum.photos/seed/120/400/600', vote_average: 9.9, vote_count: 500000, popularity: 5000, release_date: '2014-11-07' },
-          { id: 121, title: 'Gladiator II', poster_path: 'https://picsum.photos/seed/121/400/600', vote_average: 8.3, vote_count: 7500, popularity: 1300, release_date: '2026-11-22' },
-          { id: 122, title: 'Wicked', poster_path: 'https://picsum.photos/seed/122/400/600', vote_average: 8.6, vote_count: 11200, popularity: 1600, release_date: '2026-11-27' },
-          { id: 123, title: 'Kraven the Hunter', poster_path: 'https://picsum.photos/seed/123/400/600', vote_average: 7.1, vote_count: 3200, popularity: 750, release_date: '2026-12-13' },
-          { id: 124, title: 'Mufasa: The Lion King', poster_path: 'https://picsum.photos/seed/124/400/600', vote_average: 8.2, vote_count: 8900, popularity: 1450, release_date: '2026-12-20' },
-          { id: 125, title: 'Nosferatu', poster_path: 'https://picsum.photos/seed/125/400/600', vote_average: 7.8, vote_count: 4100, popularity: 600, release_date: '2026-12-25' },
-          { id: 126, title: 'Captain America: Brave New World', poster_path: 'https://picsum.photos/seed/126/400/600', vote_average: 8.5, vote_count: 15400, popularity: 2200, release_date: '2025-02-14' },
-          { id: 127, title: 'Snow White', poster_path: 'https://picsum.photos/seed/127/400/600', vote_average: 7.3, vote_count: 5600, popularity: 950, release_date: '2025-03-21' },
-          { id: 128, title: 'Elio', poster_path: 'https://picsum.photos/seed/128/400/600', vote_average: 8.1, vote_count: 6700, popularity: 1100, release_date: '2025-06-13' },
-          { id: 129, title: 'Superman', poster_path: 'https://picsum.photos/seed/129/400/600', vote_average: 9.1, vote_count: 45000, popularity: 3500, release_date: '2025-07-11' },
-          { id: 130, title: 'The Fantastic Four', poster_path: 'https://picsum.photos/seed/130/400/600', vote_average: 8.8, vote_count: 32000, popularity: 2800, release_date: '2025-07-25' },
-          { id: 131, title: 'Avatar 3', poster_path: 'https://picsum.photos/seed/131/400/600', vote_average: 8.9, vote_count: 15000, popularity: 3400, release_date: '2025-12-19' },
-          { id: 132, title: 'Avengers: Doomsday', poster_path: 'https://picsum.photos/seed/132/400/600', vote_average: 9.3, vote_count: 50000, popularity: 4500, release_date: '2026-05-01' },
-          { id: 133, title: 'Blade', poster_path: 'https://picsum.photos/seed/133/400/600', vote_average: 8.2, vote_count: 12000, popularity: 2100, release_date: '2025-11-07' },
-          { id: 134, title: 'The Batman Part II', poster_path: 'https://picsum.photos/seed/134/400/600', vote_average: 9.0, vote_count: 42000, popularity: 3800, release_date: '2025-10-03' },
-          { id: 135, title: 'Minecraft', poster_path: 'https://picsum.photos/seed/135/400/600', vote_average: 7.5, vote_count: 8500, popularity: 1900, release_date: '2025-04-04' },
-          { id: 136, title: 'Fast X: Part 2', poster_path: 'https://picsum.photos/seed/136/400/600', vote_average: 8.1, vote_count: 22000, popularity: 3100, release_date: '2025-04-04' },
-          { id: 137, title: 'Zootopia 2', poster_path: 'https://picsum.photos/seed/137/400/600', vote_average: 8.6, vote_count: 14000, popularity: 2300, release_date: '2025-11-26' },
-          { id: 138, title: 'The Conjuring: Last Rites', poster_path: 'https://picsum.photos/seed/138/400/600', vote_average: 8.0, vote_count: 11000, popularity: 1800, release_date: '2025-09-05' },
-          { id: 139, title: 'Tron: Ares', poster_path: 'https://picsum.photos/seed/139/400/600', vote_average: 8.3, vote_count: 9800, popularity: 1700, release_date: '2025-10-10' },
-          { id: 140, title: 'Toy Story 5', poster_path: 'https://picsum.photos/seed/140/400/600', vote_average: 8.7, vote_count: 18000, popularity: 2500, release_date: '2026-06-19' },
-          { id: 141, title: 'Shrek 5', poster_path: 'https://picsum.photos/seed/141/400/600', vote_average: 9.1, vote_count: 28000, popularity: 3300, release_date: '2025-05-16' },
-          { id: 142, title: 'Mission: Impossible 8', poster_path: 'https://picsum.photos/seed/142/400/600', vote_average: 8.9, vote_count: 31000, popularity: 3100, release_date: '2025-05-23' },
-          { id: 143, title: 'Super Mario Bros 2', poster_path: 'https://picsum.photos/seed/143/400/600', vote_average: 8.5, vote_count: 16000, popularity: 2600, release_date: '2026-04-03' },
-          { id: 144, title: 'Star Wars: New Jedi Order', poster_path: 'https://picsum.photos/seed/144/400/600', vote_average: 8.4, vote_count: 19000, popularity: 2800, release_date: '2026-05-22' },
-          { id: 145, title: 'Dune: Messiah', poster_path: 'https://picsum.photos/seed/145/400/600', vote_average: 9.4, vote_count: 45000, popularity: 4000, release_date: '2026-12-18' },
-          { id: 146, title: 'Frozen 3', poster_path: 'https://picsum.photos/seed/146/400/600', vote_average: 8.8, vote_count: 21000, popularity: 2900, release_date: '2026-11-25' },
-          { id: 147, title: 'Spider-Man 4', poster_path: 'https://picsum.photos/seed/147/400/600', vote_average: 9.2, vote_count: 38000, popularity: 3900, release_date: '2026-07-24' },
-          { id: 148, title: 'John Wick 5', poster_path: 'https://picsum.photos/seed/148/400/600', vote_average: 9.0, vote_count: 29000, popularity: 3200, release_date: '2026-03-24' },
-          { id: 149, title: 'The Mandalorian & Grogu', poster_path: 'https://picsum.photos/seed/149/400/600', vote_average: 8.7, vote_count: 24000, popularity: 2700, release_date: '2026-05-22' },
-          { id: 150, title: 'Avengers: Secret Wars', poster_path: 'https://picsum.photos/seed/150/400/600', vote_average: 9.6, vote_count: 60000, popularity: 5000, release_date: '2027-05-07' }
-        ]);
+        console.error("Failed to fetch home feed:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchMovies();
+    loadHome();
   }, []);
 
+  const slides = feed?.heroSlides || [];
+
+  useEffect(() => {
+    if (slides.length <= 1 || isPaused) return;
+    const timer = setInterval(() => {
+      setSlideIndex((prev) => (prev + 1) % slides.length);
+    }, 6500);
+    return () => clearInterval(timer);
+  }, [slides.length, isPaused]);
+
   if (loading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-[60vh]">
-        <LoadingSpinner message="Loading Premium Movies..." />
-      </div>
-    );
+    return <LoadingSpinner fullPage message="Curating CineReward Cinema..." />;
   }
 
-  const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/original";
+  const activeSlide = slides[slideIndex] || feed?.featured?.[0];
+  const heroWatchlisted = activeSlide ? isInWatchlist(activeSlide.id) : false;
+
+  const collectionPosterFan = (feed?.collections || [])
+    .flatMap((c) => c.previewPosters || [])
+    .filter(Boolean)
+    .slice(0, 3);
 
   return (
-    <div className="bg-[#f5f5f5] min-h-screen">
+    <div className="min-h-screen bg-[#09090d] pb-20">
+      {/* 1. Full-Bleed Cinematic Hero Spotlight Carousel (Screenshot 3) */}
+      {activeSlide && (
+        <section
+          className="relative w-full min-h-[76vh] flex items-end overflow-hidden -mt-20 pt-24"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+        >
+          <img
+            src={
+              activeSlide.backdrop_path ||
+              resolveMoviePoster(activeSlide.poster_path, activeSlide.id)
+            }
+            alt={activeSlide.title}
+            className="absolute inset-0 w-full h-full object-cover object-center transition-all duration-700 scale-[1.02]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#09090d] via-[#09090d]/75 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#09090d] via-[#09090d]/25 to-[#09090d]/40" />
 
-      {/* Recommended Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-        {error && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium px-4 py-3 rounded-lg mb-4">
-            {error}
-          </div>
-        )}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-slate-800">Recommended Movies</h2>
-          <Link to="/" className="text-primary text-sm font-bold flex items-center gap-1 hover:underline">
-            See All <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
+          <div className="relative z-10 max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 pb-12 pt-16">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="w-5 h-0.5 bg-[#e50914] inline-block" />
+                <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-300">
+                  Latest Updates &amp; In Theatres
+                </span>
+              </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-          {movies.map((movie) => (
-            <div key={movie.id} className="group cursor-pointer">
-              <Link to={`/movie/${movie.id}`} className="block relative aspect-[2/3] rounded-xl overflow-hidden shadow-md mb-3">
-                <img 
-                  src={movie.poster_path?.startsWith('http') ? movie.poster_path : movie.poster_path?.startsWith('/') ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : `https://picsum.photos/seed/${movie.id}/400/600`} 
-                  alt={movie.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                
-                {movie.id === 101 && (
-                   <div className="absolute top-3 right-3 bg-[#f84464] text-white text-[8px] font-black px-2 py-1 rounded-sm uppercase tracking-tighter">Film Festival</div>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.05] mb-4">
+                {activeSlide.title}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-300 mb-4">
+                {activeSlide.vote_average > 0 && (
+                  <span className="flex items-center gap-1 text-amber-400 font-bold">
+                    <Star className="w-3.5 h-3.5 fill-amber-400" />
+                    {Number(activeSlide.vote_average).toFixed(1)}
+                  </span>
                 )}
+                <span>{activeSlide.year || "2026"}</span>
+                <span>•</span>
+                <span>{activeSlide.mediaType === "tv" ? "Series" : "Movie"}</span>
+                <span className="bg-white/[0.08] border border-white/[0.12] px-2 py-0.5 rounded-md text-[10px] font-bold text-white">
+                  {activeSlide.quality || "IMAX"}
+                </span>
+                <span className="bg-[#e50914]/20 border border-[#e50914]/40 px-2 py-0.5 rounded-md text-[10px] font-bold text-rose-200 flex items-center gap-1">
+                  <Coins className="w-3 h-3 text-amber-400" /> +100 Coins Eligible
+                </span>
+              </div>
 
-                {/* Overlay Bottom */}
-                <div className="absolute bottom-0 left-0 w-full bg-black/90 p-2 border-t border-white/10">
-                  <div className="flex justify-between items-center px-1">
-                    <div className="flex items-center gap-1.5">
-                       {movie.id === 101 || movie.id === 103 || movie.id === 105 ? (
-                          <ThumbsUp className="w-3.5 h-3.5 text-green-500 fill-green-500" />
-                       ) : (
-                          <Star className="w-3.5 h-3.5 text-primary fill-primary" />
-                       )}
-                       <span className="text-[11px] font-black text-white">
-                         {movie.id === 101 || movie.id === 103 || movie.id === 105 ? `${(movie.vote_count / 1000).toFixed(1)}K Likes` : `${movie.vote_average.toFixed(1)}/10`}
-                       </span>
-                    </div>
-                    {!(movie.id === 101 || movie.id === 103 || movie.id === 105) && (
-                      <div className="text-[9px] font-bold text-slate-400">
-                        {(movie.vote_count / 1000).toFixed(1)}K Votes
-                      </div>
-                    )}
+              <p className="text-slate-300 text-sm sm:text-base leading-relaxed line-clamp-2 max-w-xl mb-7">
+                {activeSlide.overview}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3 mb-9">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      activeSlide.bookable !== false
+                        ? `/book/${activeSlide.id}`
+                        : `/movie/${activeSlide.id}`
+                    )
+                  }
+                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition-all flex items-center gap-2 shadow-xl"
+                >
+                  <Play className="w-4 h-4 fill-slate-950" />
+                  <span>
+                    {activeSlide.bookable !== false ? "Book Tickets" : "Explore Show"}
+                  </span>
+                </button>
+
+                <Link
+                  to={`/movie/${activeSlide.id}`}
+                  className="glass-button font-semibold text-xs sm:text-sm px-5 py-3 rounded-xl flex items-center gap-2"
+                >
+                  <Info className="w-4 h-4" />
+                  <span>More info</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleWatchlist(activeSlide);
+                    setWatchTick((t) => t + 1);
+                  }}
+                  aria-label="Toggle Watchlist"
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center border transition-all ${
+                    heroWatchlisted
+                      ? "bg-[#e50914] border-[#e50914] text-white"
+                      : "glass-button"
+                  }`}
+                >
+                  {heroWatchlisted ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* Carousel Pagination Bar (01 / 10) */}
+              {slides.length > 1 && (
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold text-white tabular-nums">
+                    {String(slideIndex + 1).padStart(2, "0")}
+                    <span className="text-slate-500 text-xs font-medium">
+                      {" "}
+                      / {String(slides.length).padStart(2, "0")}
+                    </span>
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    {slides.map((s, idx) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setSlideIndex(idx)}
+                        aria-label={`Go to slide ${idx + 1}`}
+                        className={`h-1 rounded-full transition-all duration-300 ${
+                          idx === slideIndex
+                            ? "w-7 bg-white"
+                            : "w-3 bg-white/25 hover:bg-white/50"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSlideIndex(
+                          (prev) => (prev - 1 + slides.length) % slides.length
+                        )
+                      }
+                      aria-label="Previous featured movie"
+                      className="w-8 h-8 rounded-full glass-button flex items-center justify-center"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSlideIndex((prev) => (prev + 1) % slides.length)
+                      }
+                      aria-label="Next featured movie"
+                      className="w-8 h-8 rounded-full glass-button flex items-center justify-center"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 2. Rewards Promo Banner (Matching Screenshot 3 Telegram Glass Banner) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mt-4 mb-4">
+        <div className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-r from-[#0e3455]/90 via-[#0b4b7a]/80 to-[#0e223d]/90 backdrop-blur-xl px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-300/30 flex items-center justify-center shrink-0">
+              <Coins className="w-6 h-6 text-amber-300" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white">
+                Earn 100+ Reward Coins on Every Movie Review
+              </h2>
+              <p className="text-xs sm:text-sm text-sky-100/80">
+                Book theatre tickets, submit genuine AI-scored reviews, and redeem free tickets.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/dashboard"
+            className="bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-xl flex items-center gap-1.5 shrink-0 shadow-lg transition-all"
+          >
+            <span>Open Rewards Wallet</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </section>
+
+      {/* 3. Horizontal Carousels (Screenshot 4) */}
+      <CarouselSection
+        eyebrow="YOUR NEXT DISCOVERY"
+        title="Featured selections"
+        viewAllTo="/catalog?section=featured"
+        items={feed?.featured}
+      />
+
+      <CarouselSection
+        eyebrow="BOOK NOW IN THEATRES"
+        title="Now Playing movies"
+        viewAllTo="/catalog?section=now-playing"
+        items={feed?.nowPlaying}
+      />
+
+      <CarouselSection
+        eyebrow="TRENDING THIS WEEK"
+        title="Recently updated movies"
+        viewAllTo="/catalog?section=trending"
+        items={feed?.trending}
+      />
+
+      <CarouselSection
+        eyebrow="TMDB & TVMAZE DIRECTORY"
+        title="Popular TV & Web Series"
+        viewAllTo="/catalog?section=shows"
+        items={feed?.popularShows}
+      />
+
+      {/* 4. Discover Collections Banner (Screenshot 9) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="glass-card rounded-3xl p-8 sm:p-12 relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-10">
+          <div className="max-w-lg relative z-10">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400 mb-3">
+              More Than A Movie Night
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight mb-3">
+              A different world.
+              <br />
+              Every time you watch.
+            </h2>
+            <p className="text-sm text-slate-400 mb-7 leading-relaxed">
+              Anime adventures, timeless franchises, and cinematic universes grouped
+              ready for your next marathon or theatre outing.
+            </p>
+            <Link
+              to="/collections"
+              className="inline-flex items-center gap-2 bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-xl shadow-xl transition-all"
+            >
+              <span>Discover collections</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {/* 3 Tilted Collection Posters Fan */}
+          <div className="flex items-center justify-center gap-3 sm:gap-5 relative z-10">
+            {collectionPosterFan.map((poster, i) => (
+              <Link
+                key={i}
+                to="/collections"
+                className={`w-28 sm:w-36 aspect-[2/3] rounded-2xl overflow-hidden border border-white/15 shadow-2xl transition-transform duration-500 hover:scale-105 ${
+                  i === 0
+                    ? "-rotate-6 translate-y-2"
+                    : i === 1
+                      ? "z-10 -translate-y-2"
+                      : "rotate-6 translate-y-2"
+                }`}
+              >
+                <img
+                  src={resolveMoviePoster(poster, `col-${i}`)}
+                  alt="Collection highlight"
+                  className="w-full h-full object-cover"
+                />
               </Link>
-              
-              <div className="px-1">
-                <h3 className="text-[17px] font-extrabold text-[#222] tracking-tight leading-tight mb-0.5 mt-2 line-clamp-1">{movie.title}</h3>
-                <p className="text-slate-500 text-sm font-medium mb-1">
-                  {movie.id === 102 ? 'Drama/Social' : 'Action/Thriller'}
-                </p>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Top Movies & Top Shows Split Leaderboards (Screenshot 9) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <LeaderboardCard
+            eyebrow="TOP RATED • VOTED BY FANS"
+            title="Top Movies"
+            viewAllTo="/catalog?section=top-rated"
+            items={feed?.topMovies || []}
+          />
+          <LeaderboardCard
+            eyebrow="TOP RATED • SERIES & TVMAZE"
+            title="Top Shows"
+            viewAllTo="/catalog?section=shows"
+            items={feed?.topShows || []}
+          />
+        </div>
+      </section>
+
+      {/* 6. Landing Spotlight Split + Browse by Category + Why Choose (Screenshots 1 & 2) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          <div className="lg:col-span-6 space-y-6">
+            <div className="inline-flex items-center gap-2 bg-[#e50914]/10 border border-[#e50914]/30 px-3.5 py-1.5 rounded-full text-[11px] font-bold text-rose-300">
+              <span className="w-2 h-2 rounded-full bg-[#ff2e3b] animate-pulse" />
+              LIVE • Movies, Bookings &amp; AI Rewards Daily
+            </div>
+
+            <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-[1.08]">
+              The Best Cinema Hub
+              <br />
+              for <span className="text-[#ff2e3b]">Movie Lovers</span>
+            </h2>
+
+            <p className="text-slate-400 text-sm sm:text-base leading-relaxed max-w-xl">
+              Discover Bollywood, Hollywood, South Indian &amp; Anime releases powered by
+              public cinema APIs — book theatre seats, post AI-scored reviews, and unlock
+              free ticket rewards.
+            </p>
+
+            <div className="flex flex-wrap gap-3.5 pt-1">
+              <Link
+                to="/catalog?section=featured"
+                className="btn-crimson px-6 py-3.5 rounded-full text-xs sm:text-sm inline-flex items-center gap-2"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>Explore All Movies →</span>
+              </Link>
+              <Link
+                to="/collections"
+                className="bg-gradient-to-r from-[#e50914] to-rose-600 hover:brightness-110 text-white font-bold px-6 py-3.5 rounded-full text-xs sm:text-sm inline-flex items-center gap-2 shadow-lg shadow-red-600/30 transition-all"
+              >
+                <Layers className="w-4 h-4" />
+                <span>Discover Collections →</span>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4 pt-4 max-w-md border-t border-white/[0.08]">
+              {[
+                ["IMAX / 4K", "Formats"],
+                ["AI-Scored", "Reviews"],
+                ["100 Coins", "Per Win"],
+                ["Daily", "New Titles"],
+              ].map(([val, lbl]) => (
+                <div key={lbl}>
+                  <p className="text-base sm:text-lg font-extrabold text-white">{val}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                    {lbl}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:col-span-6 space-y-3">
+            {FEATURE_LIST.map(({ title, desc, icon: Icon }) => (
+              <div
+                key={title}
+                className="glass-card-hover rounded-2xl p-4 flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#e50914]/15 border border-[#e50914]/30 flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5 text-[#ff2e3b]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{title}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Browse by Category (Screenshot 2) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Browse by Category
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1.5">
+            Find exactly what you want to watch or book tonight
+          </p>
+          <div className="w-10 h-1 bg-[#e50914] mx-auto mt-3 rounded-full" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {BROWSE_CATEGORIES.map(({ title, desc, to, icon: Icon }) => (
+            <Link
+              key={title}
+              to={to}
+              className="glass-card-hover rounded-2xl p-6 group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#e50914]/15 border border-[#e50914]/25 flex items-center justify-center mb-4 group-hover:bg-[#e50914] transition-colors">
+                <Icon className="w-5 h-5 text-[#ff2e3b] group-hover:text-white transition-colors" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">{title}</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Why Choose CineReward? (Screenshot 2) */}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Why Choose <span className="text-[#ff2e3b]">CineReward?</span>
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1.5">
+            Everything a cinema lover needs in one place
+          </p>
+          <div className="w-10 h-1 bg-[#e50914] mx-auto mt-3 rounded-full" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {WHY_CHOOSE.map(({ title, desc, icon: Icon }) => (
+            <div key={title} className="glass-card rounded-2xl p-6">
+              <div className="w-10 h-10 rounded-xl bg-[#e50914]/15 border border-[#e50914]/25 flex items-center justify-center mb-4">
+                <Icon className="w-5 h-5 text-[#ff2e3b]" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1.5">{title}</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
-      </div>
-
+      </section>
     </div>
   );
 };

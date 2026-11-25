@@ -3,8 +3,13 @@ const mongoose = require("mongoose");
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
 const authController = require("../controllers/authController");
+const { authenticate } = require("../middlewares/auth");
+const { isGoogleConfigured } = require("../middlewares/passport");
 
 const router = express.Router();
+
+const getFrontendURL = () =>
+  (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
 
 /*
  * Check whether MongoDB is connected before handling
@@ -13,16 +18,13 @@ const router = express.Router();
 const requireDatabase = (req, res, next) => {
   const state = mongoose.connection.readyState;
 
-  console.log("[DB CHECK]", {
-    readyState: state,
-    host: mongoose.connection.host || "unknown",
-    database: mongoose.connection.name || "unknown",
-  });
-
   if (state !== 1) {
+    if (req.path.startsWith("/google")) {
+      return res.redirect(`${getFrontendURL()}/login?error=db_unavailable`);
+    }
     return res.status(503).json({
       message:
-        "Google sign-in is temporarily unavailable because the database is not connected.",
+        "Authentication service is temporarily unavailable because the database is not connected.",
       dbState: state,
     });
   }
@@ -30,11 +32,16 @@ const requireDatabase = (req, res, next) => {
   next();
 };
 
+const requireGoogleStrategy = (req, res, next) => {
+  if (!isGoogleConfigured) {
+    return res.redirect(`${getFrontendURL()}/login?error=google_not_configured`);
+  }
+  next();
+};
+
 router.get("/db-test", async (req, res) => {
   try {
     const state = mongoose.connection.readyState;
-
-    console.log("[DB TEST] readyState:", state);
 
     if (state !== 1) {
       return res.status(503).json({
@@ -44,7 +51,6 @@ router.get("/db-test", async (req, res) => {
       });
     }
 
-    // Actually perform a MongoDB operation
     await mongoose.connection.db.admin().ping();
 
     return res.json({
@@ -63,56 +69,42 @@ router.get("/db-test", async (req, res) => {
     });
   }
 });
+
 // ======================================================
-// Email / Password Authentication
+// Email / Password Authentication & Session Verification
 // ======================================================
 
-router.post("/signup", authController.signup);
-
-router.post("/login", authController.login);
-
-router.post("/forgot-password", authController.forgotPassword);
-
-router.post("/reset-password", authController.resetPassword);
+router.post("/signup", requireDatabase, authController.signup);
+router.post("/login", requireDatabase, authController.login);
+router.get("/me", authenticate, authController.me);
+router.post("/forgot-password", requireDatabase, authController.forgotPassword);
+router.post("/reset-password", requireDatabase, authController.resetPassword);
 
 // ======================================================
 // Phone Authentication
 // ======================================================
 
-router.post("/phone", authController.handlePhoneAuth);
+router.post("/phone", requireDatabase, authController.handlePhoneAuth);
 
 // ======================================================
 // Google OAuth
 // ======================================================
 
-// Step 1:
-// Frontend sends user here:
-//
-// /api/auth/google
-//
-// Passport redirects the user to Google.
 router.get(
   "/google",
+  requireGoogleStrategy,
   requireDatabase,
   passport.authenticate("google", {
     scope: ["profile", "email"],
   }),
 );
 
-// Step 2:
-// Google redirects the user here:
-//
-// /api/auth/google/callback
-//
 router.get(
   "/google/callback",
-
+  requireGoogleStrategy,
   requireDatabase,
-
   (req, res, next) => {
-    const frontendURL = (
-      process.env.FRONTEND_URL || "http://localhost:3000"
-    ).replace(/\/$/, "");
+    const frontendURL = getFrontendURL();
 
     passport.authenticate(
       "google",
@@ -120,54 +112,30 @@ router.get(
         failureRedirect: `${frontendURL}/login?error=true`,
       },
       (err, user, info) => {
-        // Log the actual Passport error.
         if (err) {
-          console.error("[Google OAuth] Passport error:", err);
-          console.error("[Google OAuth] Error message:", err.message);
-
-          return res.status(503).json({
-            message: "Google sign-in failed during authentication.",
-          });
+          console.error("[Google OAuth] Passport error:", err.message);
+          return res.redirect(`${frontendURL}/login?error=oauth_failed`);
         }
 
-        // Google authentication succeeded but no user
-        // was returned.
         if (!user) {
           console.error("[Google OAuth] No user returned.", info);
-
           return res.redirect(`${frontendURL}/login?error=true`);
         }
 
-        // Attach the authenticated user to req.user.
         req.user = user;
-
         next();
       },
     )(req, res, next);
   },
-
-  // Step 3:
-  // Create JWT and redirect the user back to Vercel.
   (req, res) => {
+    const frontendURL = getFrontendURL();
     try {
       if (!req.user) {
-        console.error(
-          "[Google OAuth] req.user is missing after authentication.",
-        );
-
-        const frontendURL = (
-          process.env.FRONTEND_URL || "http://localhost:3000"
-        ).replace(/\/$/, "");
-
         return res.redirect(`${frontendURL}/login?error=true`);
       }
 
       if (!process.env.JWT_SECRET) {
-        console.error("[Google OAuth] JWT_SECRET is missing.");
-
-        return res.status(500).json({
-          message: "Server authentication configuration error.",
-        });
+        return res.redirect(`${frontendURL}/login?error=server_config`);
       }
 
       const token = jwt.sign(
@@ -181,17 +149,14 @@ router.get(
         },
       );
 
-      const frontendURL = (
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      ).replace(/\/$/, "");
-
       const userData = {
         id: req.user._id,
         name: req.user.name,
+        username: req.user.username,
         email: req.user.email,
-        coins: req.user.coins,
-        role: req.user.role,
-        profilePicture: req.user.profilePicture,
+        coins: req.user.coins || 0,
+        role: req.user.role || "user",
+        profilePicture: req.user.profilePicture || "",
       };
 
       console.log("[Google OAuth] Login successful for:", req.user.email);
@@ -203,16 +168,9 @@ router.get(
       );
     } catch (error) {
       console.error("[Google OAuth] JWT/redirect error:", error);
-
-      return res.status(500).json({
-        message: "Google sign-in completed but redirect failed.",
-      });
+      return res.redirect(`${frontendURL}/login?error=redirect_failed`);
     }
   },
 );
-
-// ======================================================
-// Export
-// ======================================================
 
 module.exports = router;

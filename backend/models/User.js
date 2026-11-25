@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    email: { type: String, unique: true, sparse: true }, // sparse allows multiple null/undefined values
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true }, // sparse allows multiple null/undefined values
     phone: { type: String, unique: true, sparse: true },
     password: { type: String }, // Optional for Google/Phone Auth users
     googleId: { type: String },

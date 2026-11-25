@@ -2,7 +2,11 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
 
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+const isGoogleConfigured = Boolean(
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+);
+
+if (isGoogleConfigured) {
   passport.use(new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -14,8 +18,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         let user = await User.findOne({ googleId: profile.id });
         
         if (!user) {
-          // Check if a user with the same email already exists
-          const email = profile.emails && profile.emails.length > 0 ? profile.emails[0].value : null;
+          const rawEmail = profile.emails && profile.emails.length > 0 ? profile.emails[0].value : null;
+          const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
           const profilePicture = profile.photos && profile.photos.length > 0 ? profile.photos[0].value : '';
           
           if (email) {
@@ -23,16 +27,16 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           }
           
           if (user) {
-            // Link Google ID to existing account
             user.googleId = profile.id;
-            if (!user.profilePicture) user.profilePicture = profilePicture;
+            if (!user.profilePicture && profilePicture) {
+              user.profilePicture = profilePicture;
+            }
             await user.save();
           } else {
-            // Create new user
             user = await User.create({
               googleId: profile.id,
               name: profile.displayName || 'Google User',
-              email: email,
+              email: email || undefined,
               profilePicture: profilePicture,
               coins: 0
             });
@@ -55,6 +59,12 @@ passport.serializeUser((user, done) => {
 });
 
 passport.deserializeUser(async (id, done) => {
-  const user = await User.findById(id);
-  done(null, user);
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err, null);
+  }
 });
+
+module.exports = { isGoogleConfigured };
