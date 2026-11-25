@@ -1,7 +1,7 @@
 const Review = require("../models/Review");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
-const { groq, model } = require("../services/aiService");
+const { classifyReviewWithAI } = require("../services/reviewClassifier");
 
 const reviewController = {
   submitReview: async (req, res) => {
@@ -19,40 +19,11 @@ const reviewController = {
         return res.status(400).json({ message: "Review already submitted" });
       }
 
-      let aiScore = 50;
       const safeComment = comment || "";
-      const heuristicScore = Math.min(
-        100,
-        rating * 7 + (safeComment.length > 20 ? 30 : 10),
+      const { aiScore, aiTags, aiSummary } = await classifyReviewWithAI(
+        safeComment,
+        rating
       );
-
-      if (groq) {
-        try {
-          const response = await groq.chat.completions.create({
-            model,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Rate the movie review quality 0-100 based on detail, emotion, and authenticity. Output number only.",
-              },
-              {
-                role: "user",
-                content: `Rating: ${rating}/10. Review: ${safeComment}`,
-              },
-            ],
-            max_tokens: 5,
-          });
-          aiScore =
-            parseInt(response.choices[0].message.content.trim()) ||
-            heuristicScore;
-        } catch (err) {
-          console.error("AI Analysis failed:", err);
-          aiScore = heuristicScore;
-        }
-      } else {
-        aiScore = heuristicScore;
-      }
 
       const review = new Review({
         userId: ticket.userId,
@@ -60,6 +31,8 @@ const reviewController = {
         rating,
         comment: safeComment,
         aiScore,
+        aiTags,
+        aiSummary,
         isVerifiedTicket: true,
         commentType: "review",
       });
@@ -100,6 +73,10 @@ const reviewController = {
       }
 
       const numericRating = Math.min(10, Math.max(1, Number(rating) || 8));
+      const { aiScore, aiTags, aiSummary } = await classifyReviewWithAI(
+        trimmedComment,
+        numericRating
+      );
 
       const discussion = new Review({
         userId: userId || undefined,
@@ -107,7 +84,9 @@ const reviewController = {
         movieId: String(movieId),
         rating: numericRating,
         comment: trimmedComment,
-        aiScore: 0,
+        aiScore,
+        aiTags,
+        aiSummary,
         isVerifiedTicket: false,
         commentType: "discussion",
       });
@@ -115,7 +94,7 @@ const reviewController = {
       await discussion.save();
       const populated = await Review.findById(discussion._id).populate(
         "userId",
-        "name profilePicture",
+        "name profilePicture"
       );
 
       res.status(201).json({ review: populated });
@@ -159,7 +138,7 @@ const reviewController = {
     } catch (err) {
       res
         .status(500)
-        .json({ message: "Error fetching ticket details", error: err.message });
+        .json({ message: "Failed to fetch ticket", error: err.message });
     }
   },
 };

@@ -395,6 +395,28 @@ const MovieDetails = () => {
                       {movie.quality || "IMAX 2D"}
                     </dd>
                   </div>
+                  {(movie.formattedBudget || movie.budget > 0) && (
+                    <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
+                      <dt className="text-slate-300">
+                        Total Budget ({movie.currencyCode || "INR"})
+                      </dt>
+                      <dd className="text-white font-semibold lg:text-right">
+                        {movie.formattedBudget ||
+                          `${movie.currencySymbol || "₹"}${Number(movie.budget).toLocaleString()}`}
+                      </dd>
+                    </div>
+                  )}
+                  {(movie.formattedCollections || movie.revenue > 0) && (
+                    <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
+                      <dt className="text-slate-300">
+                        Total Collections ({movie.currencyCode || "INR"})
+                      </dt>
+                      <dd className="text-emerald-400 font-bold lg:text-right">
+                        {movie.formattedCollections ||
+                          `${movie.currencySymbol || "₹"}${Number(movie.revenue).toLocaleString()}`}
+                      </dd>
+                    </div>
+                  )}
                   {movie.awards && (
                     <div className="col-span-2 lg:col-span-1 flex justify-between gap-4">
                       <dt className="text-slate-300">Awards</dt>
@@ -480,6 +502,29 @@ const MovieDetails = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Gallery Photos (Custom & Featured Media) */}
+        {Array.isArray(movie.galleryPhotos) && movie.galleryPhotos.length > 0 && (
+          <section className="py-6">
+            <h2 className="text-lg font-bold text-white mb-4 drop-shadow">
+              Gallery Photos
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+              {movie.galleryPhotos.map((photo, idx) => (
+                <div
+                  key={`${photo}-${idx}`}
+                  className="aspect-video rounded-2xl overflow-hidden border border-white/[0.12] bg-black/50"
+                >
+                  <img
+                    src={photo}
+                    alt={`${movie.title} still ${idx + 1}`}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                </div>
+              ))}
             </div>
           </section>
         )}

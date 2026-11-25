@@ -99,16 +99,16 @@ const DROPDOWN_MENUS = [
 ];
 
 const CITIES = [
-  { name: "Mumbai", icon: "🏰" },
-  { name: "Delhi-NCR", icon: "🏛️" },
-  { name: "Bengaluru", icon: "🏢" },
-  { name: "Hyderabad", icon: "🕌" },
-  { name: "Chandigarh", icon: "🏙️" },
-  { name: "Chennai", icon: "⛱️" },
-  { name: "Pune", icon: "⛰️" },
-  { name: "Kolkata", icon: "🚊" },
-  { name: "Kochi", icon: "🌴" },
-  { name: "Ahmedabad", icon: "🏭" },
+  { name: "Mumbai", icon: "🏰", lat: 19.076, lon: 72.8777 },
+  { name: "Delhi-NCR", icon: "🏛️", lat: 28.6139, lon: 77.209 },
+  { name: "Bengaluru", icon: "🏢", lat: 12.9716, lon: 77.5946 },
+  { name: "Hyderabad", icon: "🕌", lat: 17.385, lon: 78.4867 },
+  { name: "Chandigarh", icon: "🏙️", lat: 30.7333, lon: 76.7794 },
+  { name: "Chennai", icon: "⛱️", lat: 13.0827, lon: 80.2707 },
+  { name: "Pune", icon: "⛰️", lat: 18.5204, lon: 73.8567 },
+  { name: "Kolkata", icon: "🚊", lat: 22.5726, lon: 88.3639 },
+  { name: "Kochi", icon: "🌴", lat: 9.9312, lon: 76.2673 },
+  { name: "Ahmedabad", icon: "🏭", lat: 23.0225, lon: 72.5714 },
 ];
 
 const Navbar = () => {
@@ -120,7 +120,11 @@ const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(
+    () => !localStorage.getItem("selectedCityConfirmed")
+  );
+  const [citySearchQuery, setCitySearchQuery] = useState("");
+  const [detectingCity, setDetectingCity] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [selectedCity, setSelectedCity] = useState(
@@ -194,8 +198,43 @@ const Navbar = () => {
   const handleCitySelect = (city) => {
     setSelectedCity(city);
     localStorage.setItem("selectedCity", city);
+    localStorage.setItem("selectedCityConfirmed", "1");
     window.dispatchEvent(new CustomEvent("cinereward:city", { detail: city }));
     setIsLocationModalOpen(false);
+  };
+
+  const closeCityModal = () => {
+    localStorage.setItem("selectedCityConfirmed", "1");
+    setIsLocationModalOpen(false);
+  };
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      handleCitySelect(selectedCity || "Bengaluru");
+      return;
+    }
+    setDetectingCity(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        let nearest = CITIES[0];
+        let bestDist = Infinity;
+        for (const c of CITIES) {
+          const d = (c.lat - latitude) ** 2 + (c.lon - longitude) ** 2;
+          if (d < bestDist) {
+            bestDist = d;
+            nearest = c;
+          }
+        }
+        setDetectingCity(false);
+        handleCitySelect(nearest.name);
+      },
+      () => {
+        setDetectingCity(false);
+        handleCitySelect(selectedCity || "Bengaluru");
+      },
+      { timeout: 6000 }
+    );
   };
 
   const handleLogout = () => {
@@ -719,40 +758,72 @@ const Navbar = () => {
         </div>
       )}
 
-      {/* City Selector Glass Modal */}
+      {/* BookMyShow-style First-Launch & City Selector Glass Modal */}
       {isLocationModalOpen && (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-2xl p-4"
-          onClick={() => setIsLocationModalOpen(false)}
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-2xl p-4"
+          onClick={closeCityModal}
         >
           <div
-            className="glass-panel rounded-3xl w-full max-w-3xl overflow-hidden relative p-6 sm:p-8"
+            className="glass-panel rounded-3xl w-full max-w-3xl overflow-hidden relative p-5 sm:p-8"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              onClick={() => setIsLocationModalOpen(false)}
-              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-slate-200 flex items-center justify-center transition-colors"
+              onClick={closeCityModal}
+              aria-label="Close city picker"
+              className="absolute top-4 right-4 sm:top-5 sm:right-5 w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-slate-200 flex items-center justify-center transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center justify-center gap-2.5 mb-6">
+            <div className="flex items-center justify-center gap-2.5 mb-5">
               <MapPin className="w-5 h-5 text-[#ff2e3b]" />
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
                 Select Your Cinema City
               </h2>
             </div>
 
+            <div className="space-y-3 mb-6">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={citySearchQuery}
+                  onChange={(e) => setCitySearchQuery(e.target.value)}
+                  placeholder="Search for your city..."
+                  className="w-full bg-white/[0.06] border border-white/[0.14] rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-[#e50914]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                disabled={detectingCity}
+                className="inline-flex items-center gap-2 text-xs font-bold text-[#ff2e3b] hover:text-rose-300 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span>
+                  {detectingCity ? "Detecting nearest cinema city..." : "Detect my location"}
+                </span>
+              </button>
+            </div>
+
+            <p className="text-center text-[11px] uppercase tracking-[0.2em] text-slate-400 font-bold mb-4">
+              Popular Cities
+            </p>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {CITIES.map((city) => {
+              {CITIES.filter((c) =>
+                c.name.toLowerCase().includes(citySearchQuery.trim().toLowerCase())
+              ).map((city) => {
                 const active = selectedCity === city.name;
                 return (
                   <button
                     type="button"
                     key={city.name}
                     onClick={() => handleCitySelect(city.name)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
+                    className={`flex flex-col items-center gap-2 p-3.5 sm:p-4 rounded-2xl border transition-all ${
                       active
                         ? "bg-[#e50914]/20 border-[#e50914] text-white"
                         : "bg-white/[0.04] border-white/[0.1] text-slate-200 hover:bg-white/[0.1] hover:text-white"

@@ -1,5 +1,6 @@
 const express = require("express");
 const adminController = require("../controllers/adminController");
+const adminMovieController = require("../controllers/adminMovieController");
 const movieTeamController = require("../controllers/movieTeamController");
 const {
   authenticate,
@@ -105,6 +106,33 @@ router.put(
   requireRole("movieteam", "superadmin"),
   requireOwnTeamOrSuperadmin,
   movieTeamController.updateSecurity,
+);
+router.post(
+  "/team/analyze-comments",
+  authenticate,
+  requireRole("movieteam", "superadmin"),
+  requireOwnTeamOrSuperadmin,
+  movieTeamController.analyzeCommentsWithGroq,
+);
+
+// Custom Unified Movie Template CRUD (Admin only)
+router.get(
+  "/movies",
+  authenticate,
+  requireRole("superadmin"),
+  adminMovieController.listCustomMovies,
+);
+router.post(
+  "/movies",
+  authenticate,
+  requireRole("superadmin"),
+  adminMovieController.createCustomMovie,
+);
+router.delete(
+  "/movies/:id",
+  authenticate,
+  requireRole("superadmin"),
+  adminMovieController.deleteCustomMovie,
 );
 
 // Partner Lead Routes

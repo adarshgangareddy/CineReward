@@ -6,6 +6,11 @@ const User = require("../models/User");
 const emailService = require("../services/emailService");
 const { sendPushNotification } = require("../config/notifications");
 const { groq, model } = require("../services/aiService");
+const tmdbService = require("../services/tmdbService");
+const {
+  classifyReviewWithAI,
+  fallbackClassify,
+} = require("../services/reviewClassifier");
 const {
   hashSecret,
   verifySecret,
@@ -347,46 +352,159 @@ const movieTeamController = {
     }
   },
 
+  analyzeCommentsWithGroq: async (req, res) => {
+    try {
+      const { movieId, keywords = "" } = req.body;
+      if (!movieId) {
+        return res.status(400).json({ message: "movieId is required" });
+      }
+
+      const idCandidates = [movieId, String(movieId)];
+      if (!Number.isNaN(Number(movieId))) idCandidates.push(Number(movieId));
+
+      const allComments = await Review.find({ movieId: { $in: idCandidates } })
+        .populate("userId", "name email profilePicture")
+        .sort({ createdAt: -1 })
+        .limit(40);
+
+      for (const r of allComments.slice(0, 20)) {
+        if (!Array.isArray(r.aiTags) || r.aiTags.length === 0) {
+          const classified = await classifyReviewWithAI(r.comment || "", r.rating || 8);
+          r.aiScore = classified.aiScore;
+          r.aiTags = classified.aiTags;
+          r.aiSummary = classified.aiSummary;
+          await r.save().catch(() => {});
+        }
+      }
+
+      const trimmedKw = String(keywords || "").trim();
+      let matchedIds = null;
+
+      if (trimmedKw && groq && allComments.length > 0) {
+        try {
+          const compact = allComments.map((r) => ({
+            id: r._id.toString(),
+            comment: (r.comment || "").slice(0, 200),
+            rating: r.rating,
+            tags: r.aiTags || [],
+          }));
+          const aiResp = await groq.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  'Filter cinema reviews/comments matching the requested mood or keywords. Return JSON only: { "matchedIds": ["..."], "insight": "brief 1-sentence summary of audience sentiment" }.',
+              },
+              {
+                role: "user",
+                content: `Filter keywords: "${trimmedKw}"\nReviews: ${JSON.stringify(compact)}`,
+              },
+            ],
+            response_format: { type: "json_object" },
+            max_tokens: 300,
+          });
+          const parsed = JSON.parse(aiResp.choices?.[0]?.message?.content || "{}");
+          if (Array.isArray(parsed.matchedIds)) {
+            matchedIds = new Set(parsed.matchedIds);
+          }
+          return res.json({
+            insight: parsed.insight || `Filtered comments by "${trimmedKw}" via Groq AI.`,
+            reviews: allComments.map((r) => {
+              const obj = r.toObject();
+              return {
+                ...obj,
+                matchesFilter: matchedIds ? matchedIds.has(r._id.toString()) : true,
+              };
+            }),
+          });
+        } catch (aiErr) {
+          console.warn("[Groq Filter Fallback]:", aiErr.message);
+        }
+      }
+
+      const terms = trimmedKw
+        .toLowerCase()
+        .split(/[\s,]+/)
+        .filter(Boolean);
+
+      const evaluated = allComments.map((r) => {
+        const obj = r.toObject();
+        const hay = `${obj.comment || ""} ${(obj.aiTags || []).join(" ")} ${
+          obj.aiSummary || ""
+        }`.toLowerCase();
+        const matchesFilter =
+          terms.length === 0 || terms.some((t) => hay.includes(t));
+        return { ...obj, matchesFilter };
+      });
+
+      return res.json({
+        insight: terms.length
+          ? `Found ${evaluated.filter((r) => r.matchesFilter).length} comments matching "${trimmedKw}"`
+          : `Analyzed ${evaluated.length} audience comments & reviews.`,
+        reviews: evaluated,
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to analyze comments", error: err.message });
+    }
+  },
+
   getTeamDashboard: async (req, res) => {
     try {
       const { movieId } = req.params;
       const { teamId } = req.query;
+      const idCandidates = [movieId, String(movieId)];
+      if (!Number.isNaN(Number(movieId))) idCandidates.push(Number(movieId));
 
-      const tickets = await Ticket.find({
-        movieId: { $in: [movieId, Number(movieId), String(movieId)] },
-      });
-      const reviews = await Review.find({
-        movieId: { $in: [movieId, Number(movieId), String(movieId)] },
-        commentType: { $ne: "discussion" },
-      }).populate("userId", "name email profilePicture");
+      const [tickets, allComments, team, movieDetails] = await Promise.all([
+        Ticket.find({ movieId: { $in: idCandidates } }),
+        Review.find({ movieId: { $in: idCandidates } })
+          .populate("userId", "name email profilePicture")
+          .sort({ createdAt: -1 }),
+        MovieTeam.findById(teamId || null),
+        tmdbService.getMovieDetails(movieId).catch(() => null),
+      ]);
 
-      // Separate into recent (not winners) and past (winners)
-      const recentReviews = reviews
-        .filter((r) => !r.isWinner)
-        .map((r) => ({
-          ...r.toObject(),
-          aiScore: r.aiScore || 50,
-        }));
+      const hydrateTags = (r) => {
+        const obj = r.toObject();
+        const fb = fallbackClassify(obj.comment || "", obj.rating || 8);
+        return {
+          ...obj,
+          aiScore: obj.aiScore || fb.aiScore,
+          aiTags: Array.isArray(obj.aiTags) && obj.aiTags.length > 0 ? obj.aiTags : fb.aiTags,
+          aiSummary: obj.aiSummary || fb.aiSummary,
+        };
+      };
 
-      const pastReviewers = reviews
-        .filter((r) => r.isWinner)
-        .map((r) => ({
-          ...r.toObject(),
-          aiScore: r.aiScore || 100,
-        }));
-
-      const team = await MovieTeam.findById(teamId || null);
+      const hydratedAll = allComments.map(hydrateTags);
+      const recentReviews = hydratedAll.filter(
+        (r) => r.commentType !== "discussion" && !r.isWinner
+      );
+      const pastReviewers = hydratedAll.filter((r) => r.isWinner);
+      const ticketRevenue = tickets.reduce((acc, t) => acc + (Number(t.price) || 0), 0);
 
       res.json({
         ticketCount: tickets.length,
+        ticketRevenue,
         recentReviews,
         pastReviewers,
+        allComments: hydratedAll,
         movieTitle:
-          tickets.length > 0
-            ? tickets[0].movieTitle
-            : reviews.length > 0
-              ? "Movie Feedback"
-              : "",
+          movieDetails?.title ||
+          (tickets.length > 0 ? tickets[0].movieTitle : `Movie ${movieId}`),
+        movieFinancials: movieDetails
+          ? {
+              title: movieDetails.title,
+              poster_path: movieDetails.poster_path,
+              country: movieDetails.country || "IN",
+              currencyCode: movieDetails.currencyCode || "INR",
+              currencySymbol: movieDetails.currencySymbol || "₹",
+              totalBudget: movieDetails.totalBudget || 0,
+              totalCollections: movieDetails.totalCollections || 0,
+              formattedBudget: movieDetails.formattedBudget || "Not Disclosed",
+              formattedCollections: movieDetails.formattedCollections || "Not Disclosed",
+            }
+          : null,
         freeTicketsCount: team ? team.freeTicketsCount : 0,
       });
     } catch (err) {

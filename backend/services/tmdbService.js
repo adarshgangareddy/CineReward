@@ -1,5 +1,11 @@
 require("dotenv").config();
 const axios = require("axios");
+const mongoose = require("mongoose");
+const Movie = require("../models/Movie");
+const {
+  formatTmdbFinancials,
+  formatCurrencyCompact,
+} = require("../utils/currencyHelper");
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_W500 = "https://image.tmdb.org/t/p/w500";
@@ -512,22 +518,131 @@ const CITY_THEATRES_MAP = {
   ],
 };
 
-function buildTheatresForMovie(movieId, city = "Bengaluru") {
+function normalizeCustomMovieDoc(doc) {
+  const formattedBudget = formatCurrencyCompact(
+    doc.totalBudget,
+    doc.currencyCode,
+    doc.currencySymbol
+  );
+  const formattedCollections = formatCurrencyCompact(
+    doc.totalCollections,
+    doc.currencyCode,
+    doc.currencySymbol
+  );
+  return {
+    id: doc.customId,
+    rawId: doc.customId,
+    mediaType: doc.mediaType || "movie",
+    source: "custom",
+    isCustomMovie: true,
+    title: doc.title,
+    tagline: doc.tagline || "Featured CineReward Release",
+    overview: doc.overview || "",
+    poster_path: doc.posterUrl,
+    backdrop_path: doc.backdropUrl || doc.posterUrl,
+    galleryPhotos: Array.isArray(doc.galleryPhotos) ? doc.galleryPhotos : [],
+    vote_average: Number(doc.rating || 8.5),
+    vote_count: 1500,
+    popularity: 1200,
+    release_date: doc.releaseDate || "",
+    year: doc.year || (doc.releaseDate ? String(doc.releaseDate).slice(0, 4) : "2026"),
+    runtime: doc.runtime || 145,
+    certification: doc.certification || "UA 13+",
+    director: doc.director || "Featured Director",
+    original_language: doc.originalLanguage || "en",
+    language: doc.language || "English",
+    genre_ids: [],
+    genres: (doc.genres || []).map((name, i) => ({ id: 9500 + i, name })),
+    quality: doc.quality || "IMAX 4K",
+    country: doc.country || "IN",
+    currencyCode: doc.currencyCode || "INR",
+    currencySymbol: doc.currencySymbol || "₹",
+    totalBudget: Number(doc.totalBudget || 0),
+    totalCollections: Number(doc.totalCollections || 0),
+    formattedBudget,
+    formattedCollections,
+    trailerKey: doc.trailerKey || null,
+    trailerUrl: doc.trailerUrl || null,
+    cast: (doc.cast || []).map((c, idx) => ({
+      id: `custom-cast-${idx}`,
+      name: c.name,
+      character: c.character || "Lead Cast",
+      profile_path: c.photoUrl || null,
+    })),
+    ticketPricing: doc.ticketPricing || { classic: 240, grand: 360, majestic: 540 },
+    customTheatres: Array.isArray(doc.theatres) ? doc.theatres : [],
+    paymentConfig: doc.paymentConfig || {
+      upi: true,
+      card: true,
+      wallets: true,
+      netBanking: true,
+      coinsRedeemable: true,
+      rewardCoinsPerSeat: 25,
+    },
+    bookable: true,
+  };
+}
+
+async function getCustomMoviesNormalized() {
+  const cached = getCachedData("custom:movies:list", 60 * 1000);
+  if (cached) return cached;
+  if (mongoose.connection.readyState !== 1) return [];
+  try {
+    const docs = await Movie.find({ isPublished: true }).sort({ createdAt: -1 }).lean();
+    const list = docs.map(normalizeCustomMovieDoc);
+    setCachedData("custom:movies:list", list);
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+function buildTheatresForMovie(movieId, city = "Bengaluru", customMovie = null) {
   const normalizedCity = Object.keys(CITY_THEATRES_MAP).find(
     (c) => c.toLowerCase() === String(city || "").trim().toLowerCase()
   ) || "Bengaluru";
 
-  const cityVenues = CITY_THEATRES_MAP[normalizedCity];
+  const customPricing = customMovie?.ticketPricing;
+  const customCityVenues = (customMovie?.customTheatres || [])
+    .filter(
+      (t) =>
+        !t.city || t.city.toLowerCase() === normalizedCity.toLowerCase()
+    )
+    .map((t) => ({
+      name: t.name,
+      area: t.area || normalizedCity,
+      badge: t.badge || "Dolby Atmos • 4K",
+      formats: ["2D", "IMAX 2D", "Dolby Atmos"],
+      price: Number(t.price) || Number(customPricing?.classic) || 260,
+      amenities: ["M-Ticket", "Featured Venue", "Dolby Atmos"],
+    }));
+
+  const cityVenues = [
+    ...customCityVenues,
+    ...CITY_THEATRES_MAP[normalizedCity].filter(
+      (v) => !customCityVenues.some((cv) => cv.name.toLowerCase() === v.name.toLowerCase())
+    ),
+  ].slice(0, 10);
+
   const seed = String(movieId)
     .split("")
     .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
 
   return cityVenues.map((venue, idx) => {
-    const baseTimes = ["09:45 AM", "12:30 PM", "03:45 PM", "07:15 PM", "10:30 PM"];
+    const classicPrice = customPricing?.classic ? Number(customPricing.classic) : venue.price;
+    const grandPrice = customPricing?.grand
+      ? Number(customPricing.grand)
+      : venue.price + 110;
+    const majesticPrice = customPricing?.majestic
+      ? Number(customPricing.majestic)
+      : venue.price + 240;
+
+    const baseTimes = ["09:20 AM", "12:30 PM", "03:40 PM", "07:15 PM", "10:00 PM"];
     const slots = baseTimes.map((t, sIdx) => ({
       time: t,
       status: (idx + sIdx + seed) % 4 === 0 ? "fast" : "available",
       screen: idx === 0 ? "Screen 1 • Laser Atmos" : `Audi ${(idx % 6) + 1}`,
+      experience: venue.formats?.[sIdx % venue.formats.length] || "2D",
     }));
 
     return {
@@ -538,9 +653,15 @@ function buildTheatresForMovie(movieId, city = "Bengaluru") {
       city: normalizedCity,
       badge: venue.badge,
       formats: venue.formats,
-      basePrice: venue.price,
+      basePrice: classicPrice,
+      tiers: [
+        { key: "majestic", label: "MAJESTIC", price: majesticPrice, status: idx % 3 === 0 ? "Filling Fast" : "Available" },
+        { key: "grand", label: "GRAND", price: grandPrice, status: "Available" },
+        { key: "classic", label: "CLASSIC", price: classicPrice, status: "Available" },
+      ],
       amenities: venue.amenities,
       cancellable: idx % 2 === 0,
+      promo: idx === 0 ? "100 Coins Cashback on 2+ Tickets!" : null,
       slots,
     };
   });
@@ -644,7 +765,7 @@ const tmdbService = {
     const cached = getCachedData(cacheKey, SHORT_TTL);
     if (cached) return cached;
 
-    const [
+    const [customMovies,
       trendingMoviesRes,
       nowPlayingRes,
       popularRes,
@@ -653,6 +774,7 @@ const tmdbService = {
       tvTopRes,
       tvMazeRes,
     ] = await Promise.all([
+      getCustomMoviesNormalized(),
       tmdbGet("/trending/movie/week", { page: 1 }).catch(() => ({ results: [] })),
       tmdbGet("/movie/now_playing", { region: "IN", page: 1 }).catch(() => ({ results: [] })),
       tmdbGet("/movie/popular", { page: 1 }).catch(() => ({ results: [] })),
@@ -694,9 +816,10 @@ const tmdbService = {
       (nowPlayingRes.results || []).map((m) => normalizeTmdbMovie(m, "movie"))
     ).filter((m) => m.poster_path);
 
-    const featured = dedupeById(
-      (popularRes.results || []).map((m) => normalizeTmdbMovie(m, "movie"))
-    ).filter((m) => m.poster_path);
+    const featured = dedupeById([
+      ...customMovies,
+      ...(popularRes.results || []).map((m) => normalizeTmdbMovie(m, "movie")),
+    ]).filter((m) => m.poster_path);
 
     const topMovies = dedupeById(
       (topRatedRes.results || []).map((m) => normalizeTmdbMovie(m, "movie"))
@@ -710,6 +833,7 @@ const tmdbService = {
     const topShows = dedupeById([...tmdbShows.slice(0, 12), ...tvMazeRes.slice(0, 8)]);
 
     const heroCandidates = dedupeById([
+      ...customMovies.filter((m) => m.backdrop_path),
       ...trendingMovies.filter((m) => m.backdrop_path),
       ...nowPlaying.filter((m) => m.backdrop_path),
     ]).slice(0, 10);
@@ -717,7 +841,7 @@ const tmdbService = {
     const payload = {
       heroSlides: heroCandidates,
       featured: featured.slice(0, 14),
-      nowPlaying: nowPlaying.slice(0, 14),
+      nowPlaying: dedupeById([...customMovies, ...nowPlaying]).slice(0, 14),
       trending: trendingMovies.slice(0, 14),
       topMovies: topMovies.slice(0, 10),
       topShows: topShows.slice(0, 10),
@@ -899,6 +1023,13 @@ const tmdbService = {
       items = FALLBACK_MOVIES;
     }
 
+    if (p === 1 && !ott) {
+      const customList = await getCustomMoviesNormalized();
+      if (customList.length > 0) {
+        items = [...customList, ...items];
+      }
+    }
+
     const filtered = applyLocalFilters(
       dedupeById(items).filter((m) => m.poster_path),
       { type, genre, language, year, sort }
@@ -1054,6 +1185,21 @@ const tmdbService = {
 
   getMovieDetails: async (rawParamId, mediaTypeHint) => {
     const idStr = String(rawParamId);
+
+    // 0. Custom Admin Movie
+    if (idStr.startsWith("cr-") && mongoose.connection.readyState === 1) {
+      const customDoc = await Movie.findOne({ customId: idStr }).lean();
+      if (customDoc) {
+        const customItem = normalizeCustomMovieDoc(customDoc);
+        const similarList = (await tmdbService.getPopular(1)).slice(0, 6);
+        return {
+          ...customItem,
+          status: "Released",
+          spokenLanguages: [customItem.language],
+          similar: similarList,
+        };
+      }
+    }
 
     // 1. Studio Ghibli film
     if (idStr.startsWith("ghibli-")) {
@@ -1242,6 +1388,13 @@ const tmdbService = {
           ? data.recommendations.results
           : data.similar?.results || [];
 
+      const financials = formatTmdbFinancials({
+        budgetUsd: data.budget,
+        revenueUsd: data.revenue,
+        countryCode: data.production_countries?.[0]?.iso_3166_1,
+        originalLanguage: data.original_language,
+      });
+
       const full = {
         ...normalized,
         imdb_id: data.imdb_id,
@@ -1252,6 +1405,7 @@ const tmdbService = {
         status: data.status || "Released",
         budget: data.budget || 0,
         revenue: data.revenue || 0,
+        ...financials,
         tagline: data.tagline || "",
         director: directorObj?.name || omdb?.Director || "Featured Director",
         certification: cert,
@@ -1286,8 +1440,18 @@ const tmdbService = {
     }
   },
 
+  invalidateCustomCache: () => {
+    cache.delete("custom:movies:list");
+    cache.delete("home:feed:v2");
+  },
+
   getTheatres: async (movieId, city = "Bengaluru") => {
-    return buildTheatresForMovie(movieId, city);
+    let customMovie = null;
+    if (String(movieId).startsWith("cr-") && mongoose.connection.readyState === 1) {
+      const doc = await Movie.findOne({ customId: String(movieId) }).lean();
+      if (doc) customMovie = normalizeCustomMovieDoc(doc);
+    }
+    return buildTheatresForMovie(movieId, city, customMovie);
   },
 
   warmCache: async () => {
@@ -1353,7 +1517,10 @@ const tmdbService = {
     let combined = getCachedData(cacheKey, SHORT_TTL);
 
     if (!combined) {
-      const [tmdbMovies, tmdbTv, tvMaze, ghibli] = await Promise.all([
+      const [customList, tmdbMovies, tmdbTv, tvMaze, ghibli] = await Promise.all([
+        getCustomMoviesNormalized().then((list) =>
+          list.filter((m) => (m.title || "").toLowerCase().includes(trimmed.toLowerCase()))
+        ),
         tmdbGet("/search/movie", { query: trimmed, page: 1 }).catch(() => ({ results: [] })),
         tmdbGet("/search/tv", { query: trimmed, page: 1 }).catch(() => ({ results: [] })),
         axios
@@ -1366,6 +1533,7 @@ const tmdbService = {
       ]);
 
       combined = dedupeById([
+        ...customList,
         ...(tmdbMovies.results || []).map((m) => normalizeTmdbMovie(m, "movie")),
         ...(tmdbTv.results || []).slice(0, 10).map((s) => normalizeTmdbMovie(s, "tv")),
         ...ghibli,

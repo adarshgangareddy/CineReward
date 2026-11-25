@@ -49,8 +49,8 @@ app.use(
 // BODY PARSING
 // --------------------------------------------------
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "8mb" }));
+app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 
 // --------------------------------------------------
 // SESSION

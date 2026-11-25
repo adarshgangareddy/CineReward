@@ -13,10 +13,16 @@ const ticketController = {
         movieId,
         movieTitle,
         theatre,
+        city,
+        languageFormat,
         seat,
         date,
         time,
         price,
+        snacksTotal,
+        snacksSummary,
+        convenienceFee,
+        paymentMethod,
         useCoins,
       } = req.body;
 
@@ -60,12 +66,18 @@ const ticketController = {
         userId,
         movieId,
         movieTitle,
+        theatre,
+        city: city || "",
+        languageFormat: languageFormat || "",
         seatNumber: seat,
         date,
         time,
         showtimeEnd,
         price,
-        theatre,
+        snacksTotal: Number(snacksTotal) || 0,
+        snacksSummary: snacksSummary || "",
+        convenienceFee: Number(convenienceFee) || 0,
+        paymentMethod: paymentMethod || "Online Payment",
       });
 
       await ticket.save();
