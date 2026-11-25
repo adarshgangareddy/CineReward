@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import {
   Play,
@@ -22,6 +22,7 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import { isInWatchlist, toggleWatchlist } from "../utils/watchlist";
 import { getActiveSession } from "../utils/auth";
 import { setActiveBackdrop } from "../utils/backdrop";
+import { getCached, setCached } from "../utils/cache";
 
 const formatRuntime = (mins) => {
   const n = Number(mins);
@@ -34,16 +35,24 @@ const formatRuntime = (mins) => {
 const MovieDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const discussionRef = useRef(null);
 
-  const [movie, setMovie] = useState(null);
-  const [episodes, setEpisodes] = useState([]);
-  const [selectedSeason, setSelectedSeason] = useState(1);
+  const passedMovie = location.state?.movie;
+  const cachedDetail = getCached(`movie:${id}`);
+  const initialMovie = cachedDetail || (passedMovie && String(passedMovie.id) === String(id) ? passedMovie : null);
+
+  const [movie, setMovie] = useState(initialMovie);
+  const [episodes, setEpisodes] = useState(initialMovie?.episodes || []);
+  const [selectedSeason, setSelectedSeason] = useState(
+    initialMovie?.seasons?.[0]?.season_number || 1
+  );
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(!initialMovie);
+  const [saved, setSaved] = useState(() => isInWatchlist(id));
   const [trailerOpen, setTrailerOpen] = useState(false);
+  const [expandOverview, setExpandOverview] = useState(false);
 
   const session = getActiveSession();
   const [displayName, setDisplayName] = useState(session?.data?.name || "");
@@ -53,33 +62,68 @@ const MovieDetails = () => {
   const [postError, setPostError] = useState("");
 
   useEffect(() => {
-    const fetchDetails = async () => {
+    const cached = getCached(`movie:${id}`);
+    const stateMovie =
+      location.state?.movie && String(location.state.movie.id) === String(id)
+        ? location.state.movie
+        : null;
+    const prefill = cached || stateMovie;
+
+    if (prefill) {
+      setMovie(prefill);
+      setEpisodes(Array.isArray(prefill.episodes) ? prefill.episodes : []);
+      setLoading(false);
+      const bg =
+        prefill.backdrop_path || resolveMoviePoster(prefill.poster_path, prefill.id);
+      setActiveBackdrop(bg, "detail");
+    } else {
+      setMovie(null);
+      setEpisodes([]);
       setLoading(true);
-      try {
-        const [movieRes, reviewsRes] = await Promise.all([
-          axios.get(`/api/movies/${id}`),
-          axios.get(`/api/reviews/movie/${id}`).catch(() => ({ data: [] })),
-        ]);
+      // Clear any previous movie's backdrop immediately so the wrong film never shows while loading
+      setActiveBackdrop(null, "detail");
+    }
+
+    setSaved(isInWatchlist(id));
+    setExpandOverview(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    let cancelled = false;
+
+    axios
+      .get(`/api/movies/${id}`)
+      .then((movieRes) => {
+        if (cancelled) return;
         const data = movieRes.data;
+        setCached(`movie:${id}`, data);
         setMovie(data);
         setEpisodes(Array.isArray(data?.episodes) ? data.episodes : []);
         setSelectedSeason(data?.seasons?.[0]?.season_number || 1);
-        setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
-        setSaved(isInWatchlist(id));
-
         const bg =
           data?.backdrop_path || resolveMoviePoster(data?.poster_path, data?.id);
         setActiveBackdrop(bg, "detail");
-      } catch (err) {
-        console.error("Error fetching movie details:", err);
-        setMovie(null);
-      } finally {
-        setLoading(false);
-      }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("Error fetching movie details:", err);
+          if (!prefill) setMovie(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    axios
+      .get(`/api/reviews/movie/${id}`)
+      .then((res) => {
+        if (!cancelled) setReviews(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
     };
-    fetchDetails();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [id]);
+  }, [id, location.state]);
 
   const handleSeasonChange = async (seasonNum) => {
     const num = Number(seasonNum);
@@ -125,10 +169,12 @@ const MovieDetails = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner fullPage message="Loading Cinema Details..." />;
+  if (loading && !movie) {
+    return <LoadingSpinner fullPage message="Loading Cinema Details..." />;
+  }
   if (!movie) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center text-white">
+      <div className="min-h-[70vh] flex flex-col items-center justify-center text-white px-5 text-center">
         <p className="text-lg font-bold mb-4">Title not found</p>
         <Link to="/" className="btn-crimson px-6 py-2.5 rounded-xl text-xs">
           Back Home
@@ -155,16 +201,16 @@ const MovieDetails = () => {
   const isSeries = movie.mediaType === "tv";
 
   return (
-    <div className="min-h-screen relative pb-20 -mt-20">
-      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-32">
-        {/* Hero Floating Over Crisp Full-Bleed Backdrop (Screenshots 1 & 6) */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 pb-12">
-          <div className="max-w-2xl">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.06] mb-2.5 drop-shadow-[0_6px_24px_rgba(0,0,0,0.85)]">
+    <div className="min-h-screen relative pb-24 sm:pb-20 -mt-20">
+      <div className="relative z-10 max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 pt-28 sm:pt-32">
+        {/* Hero Floating Over Crisp Full-Bleed Backdrop */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 lg:gap-10 pb-10 sm:pb-12">
+          <div className="max-w-2xl w-full">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.06] mb-2.5 drop-shadow-[0_6px_24px_rgba(0,0,0,0.85)]">
               {movie.title}
             </h1>
 
-            <p className="text-xs sm:text-sm text-slate-200 font-medium mb-6 drop-shadow">
+            <p className="text-xs sm:text-sm text-slate-200 font-medium mb-5 sm:mb-6 drop-shadow">
               {genreLine}
             </p>
 
@@ -173,8 +219,10 @@ const MovieDetails = () => {
               {movie.bookable !== false ? (
                 <button
                   type="button"
-                  onClick={() => navigate(`/book/${movie.id}`)}
-                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition-all flex items-center gap-2 shadow-2xl"
+                  onClick={() =>
+                    navigate(`/book/${movie.id}`, { state: { movie } })
+                  }
+                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-full sm:rounded-xl transition-all flex items-center gap-2 shadow-2xl"
                 >
                   <TicketIcon className="w-4 h-4" />
                   <span>Book Tickets</span>
@@ -187,7 +235,7 @@ const MovieDetails = () => {
                       ? setTrailerOpen(true)
                       : discussionRef.current?.scrollIntoView({ behavior: "smooth" })
                   }
-                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition-all flex items-center gap-2 shadow-2xl"
+                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-full sm:rounded-xl transition-all flex items-center gap-2 shadow-2xl"
                 >
                   <Play className="w-4 h-4 fill-slate-950" />
                   <span>{movie.trailerKey ? "Play Trailer" : "Explore Show"}</span>
@@ -199,9 +247,7 @@ const MovieDetails = () => {
                 onClick={handleToggleWatchlist}
                 title={saved ? "Remove from Watchlist" : "Add to Watchlist"}
                 className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all ${
-                  saved
-                    ? "bg-[#e50914] border-[#e50914] text-white"
-                    : "glass-button"
+                  saved ? "bg-[#e50914] border-[#e50914] text-white" : "glass-button"
                 }`}
               >
                 {saved ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -252,7 +298,7 @@ const MovieDetails = () => {
               )}
               {movie.bookable !== false && (
                 <span className="bg-[#e50914]/25 backdrop-blur-xl border border-[#e50914]/45 px-2.5 py-1 rounded-md text-rose-100 flex items-center gap-1">
-                  <Coins className="w-3 h-3 text-amber-400" /> +100 Coins Review Reward
+                  <Coins className="w-3 h-3 text-amber-400" /> +100 Coins
                 </span>
               )}
             </div>
@@ -266,46 +312,56 @@ const MovieDetails = () => {
               </p>
             )}
 
-            <p className="text-slate-100/90 text-sm leading-relaxed max-w-xl drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
+            <p
+              className={`text-slate-100/90 text-sm leading-relaxed max-w-xl drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] ${
+                expandOverview ? "" : "line-clamp-3 sm:line-clamp-none"
+              }`}
+            >
               {movie.overview}
             </p>
+            {movie.overview && movie.overview.length > 140 && (
+              <button
+                type="button"
+                onClick={() => setExpandOverview(!expandOverview)}
+                className="sm:hidden text-xs font-bold text-[#ff2e3b] mt-1.5"
+              >
+                {expandOverview ? "Show less" : "Read more"}
+              </button>
+            )}
           </div>
 
-          {/* Right Floating Frosted Glass Info Box (Screenshots 1 & 6) */}
-          <div className="w-full lg:w-80 bg-white/[0.08] backdrop-blur-2xl border border-white/[0.18] rounded-2xl p-6 shadow-[0_24px_70px_rgba(0,0,0,0.65)] shrink-0">
-            <dl className="space-y-3.5 text-xs">
+          {/* Right Floating Frosted Glass Info Box (2-col on mobile, sleek stack on desktop) */}
+          <div className="w-full lg:w-80 bg-white/[0.08] backdrop-blur-2xl border border-white/[0.18] rounded-2xl p-5 sm:p-6 shadow-[0_24px_70px_rgba(0,0,0,0.65)] shrink-0">
+            <dl className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-3.5 text-xs">
               {isSeries ? (
                 <>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Status</dt>
-                    <dd className="text-white font-semibold text-right">
+                    <dd className="text-white font-semibold lg:text-right">
                       {movie.status || "TV Series"}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Language</dt>
-                    <dd className="text-white font-semibold text-right truncate max-w-[170px]">
+                    <dd className="text-white font-semibold lg:text-right truncate">
                       {languageText}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">First Aired</dt>
-                    <dd className="text-white font-semibold text-right">{formattedDate}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-slate-300">Available seasons</dt>
-                    <dd className="text-white font-semibold text-right">
-                      {movie.seasonsCount || 1}
+                    <dd className="text-white font-semibold lg:text-right">
+                      {formattedDate}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-slate-300">Available episodes</dt>
-                    <dd className="text-white font-semibold text-right">
-                      {movie.episodesCount || episodes.length}
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
+                    <dt className="text-slate-300">Seasons / Episodes</dt>
+                    <dd className="text-white font-semibold lg:text-right">
+                      {movie.seasonsCount || 1}S •{" "}
+                      {movie.episodesCount || episodes.length}E
                     </dd>
                   </div>
                   {movie.network && (
-                    <div className="flex justify-end pt-2 border-t border-white/[0.1]">
+                    <div className="col-span-2 lg:col-span-1 flex justify-end pt-2 border-t border-white/[0.1]">
                       <span className="text-slate-200 font-semibold flex items-center gap-1.5">
                         <Tv className="w-3.5 h-3.5 text-[#ff2e3b]" />
                         {movie.network}
@@ -315,72 +371,66 @@ const MovieDetails = () => {
                 </>
               ) : (
                 <>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Runtime</dt>
-                    <dd className="text-white font-semibold text-right">
+                    <dd className="text-white font-semibold lg:text-right">
                       {formatRuntime(movie.runtime)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Language</dt>
-                    <dd className="text-white font-semibold text-right truncate max-w-[170px]">
+                    <dd className="text-white font-semibold lg:text-right truncate">
                       {languageText}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Release Date</dt>
-                    <dd className="text-white font-semibold text-right">{formattedDate}</dd>
+                    <dd className="text-white font-semibold lg:text-right">
+                      {formattedDate}
+                    </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex flex-col lg:flex-row lg:justify-between gap-1 lg:gap-4">
                     <dt className="text-slate-300">Quality / Format</dt>
-                    <dd className="text-white font-semibold text-right">
+                    <dd className="text-white font-semibold lg:text-right">
                       {movie.quality || "IMAX 2D"}
                     </dd>
                   </div>
                   {movie.awards && (
-                    <div className="flex justify-between gap-4">
+                    <div className="col-span-2 lg:col-span-1 flex justify-between gap-4">
                       <dt className="text-slate-300">Awards</dt>
-                      <dd className="text-amber-300 font-semibold text-right max-w-[175px]">
+                      <dd className="text-amber-300 font-semibold text-right">
                         {movie.awards}
                       </dd>
                     </div>
                   )}
-                  <div className="flex justify-between gap-4 pt-2 border-t border-white/[0.1]">
-                    <dt className="text-slate-300">Reviews</dt>
-                    <dd className="text-white font-semibold text-right">
-                      {reviews.length} posted
-                    </dd>
-                  </div>
                 </>
               )}
             </dl>
           </div>
         </div>
 
-        {/* Floating Frosted Glass Episodes Grid for TV Series (Screenshot 1) */}
+        {/* Floating Frosted Glass Episodes Grid for TV Series */}
         {isSeries && (episodes.length > 0 || (movie.seasons && movie.seasons.length > 0)) && (
           <section className="mb-10">
-            <div className="glass-panel rounded-3xl p-6 sm:p-7">
+            <div className="glass-panel rounded-3xl p-5 sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
                 <h2 className="text-xl font-bold text-white">Episodes</h2>
                 {movie.seasons && movie.seasons.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedSeason}
-                      onChange={(e) => handleSeasonChange(e.target.value)}
-                      className="bg-white/[0.08] border border-white/[0.15] text-white text-xs font-semibold rounded-xl px-4 py-2 focus:outline-none focus:border-[#e50914]"
-                    >
-                      {movie.seasons.map((s) => (
-                        <option
-                          key={s.season_number}
-                          value={s.season_number}
-                          className="bg-[#121520]"
-                        >
-                          {s.name || `Season ${s.season_number}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    value={selectedSeason}
+                    onChange={(e) => handleSeasonChange(e.target.value)}
+                    className="bg-white/[0.08] border border-white/[0.15] text-white text-xs font-semibold rounded-xl px-4 py-2 focus:outline-none focus:border-[#e50914]"
+                  >
+                    {movie.seasons.map((s) => (
+                      <option
+                        key={s.season_number}
+                        value={s.season_number}
+                        className="bg-[#121520]"
+                      >
+                        {s.name || `Season ${s.season_number}`}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
               <p className="text-xs text-slate-400 mb-5">
@@ -434,7 +484,7 @@ const MovieDetails = () => {
           </section>
         )}
 
-        {/* Cast Strip Floating Over Backdrop (Screenshot 6) */}
+        {/* Cast Strip */}
         {movie.cast && movie.cast.length > 0 && (
           <section className="py-6">
             <h2 className="text-lg font-bold text-white mb-5 drop-shadow">Cast</h2>
@@ -468,24 +518,24 @@ const MovieDetails = () => {
           </section>
         )}
 
-        {/* Trailer Frosted Glass Card (Screenshot 7) */}
+        {/* Trailer Frosted Glass Card */}
         <section className="py-6">
           <div
             onClick={() => movie.trailerKey && setTrailerOpen(true)}
-            className={`bg-white/[0.08] backdrop-blur-2xl border border-white/[0.16] rounded-2xl p-3 max-w-2xl flex items-center gap-5 shadow-2xl transition-all ${
+            className={`bg-white/[0.08] backdrop-blur-2xl border border-white/[0.16] rounded-2xl p-3 max-w-2xl flex items-center gap-4 sm:gap-5 shadow-2xl transition-all ${
               movie.trailerKey
                 ? "cursor-pointer hover:bg-white/[0.13] hover:border-white/30"
                 : ""
             }`}
           >
-            <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-black/50 shrink-0">
+            <div className="relative w-32 sm:w-44 aspect-video rounded-xl overflow-hidden bg-black/50 shrink-0">
               <img
                 src={backdropSrc || posterSrc}
                 alt={`${movie.title} trailer`}
                 className="w-full h-full object-cover opacity-85"
               />
               <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                <div className="w-10 h-10 rounded-full bg-[#e50914] flex items-center justify-center shadow-lg">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#e50914] flex items-center justify-center shadow-lg">
                   <Play className="w-4 h-4 fill-white text-white ml-0.5" />
                 </div>
               </div>
@@ -495,7 +545,7 @@ const MovieDetails = () => {
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300 mb-1">
                 TRAILER
               </p>
-              <h3 className="text-base sm:text-lg font-bold text-white truncate">
+              <h3 className="text-sm sm:text-lg font-bold text-white truncate">
                 {movie.title}
               </h3>
               {movie.trailerKey ? (
@@ -516,9 +566,9 @@ const MovieDetails = () => {
           </div>
         </section>
 
-        {/* You Might Also Like (Screenshot 7) */}
+        {/* You Might Also Like */}
         {movie.similar && movie.similar.length > 0 && (
-          <section className="py-10">
+          <section className="py-8">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-white tracking-tight">
                 You Might Also Like
@@ -532,7 +582,7 @@ const MovieDetails = () => {
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5">
+            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5">
               {movie.similar.slice(0, 6).map((sim) => (
                 <MovieCard key={sim.id} movie={sim} />
               ))}
@@ -540,10 +590,10 @@ const MovieDetails = () => {
           </section>
         )}
 
-        {/* Discussion & Reviews Frosted Glass Card (Screenshots 7 & 8) */}
-        <section ref={discussionRef} className="py-10 scroll-mt-24">
+        {/* Discussion & Reviews Frosted Glass Card */}
+        <section ref={discussionRef} className="py-8 scroll-mt-24">
           <div className="max-w-2xl mx-auto bg-white/[0.07] backdrop-blur-3xl border border-white/[0.15] rounded-2xl p-6 sm:p-8 shadow-[0_28px_80px_rgba(0,0,0,0.7)]">
-            <div className="flex items-center justify-between gap-4 mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <span>Discussion</span>
                 <span className="text-xs font-semibold text-slate-300">
@@ -553,6 +603,7 @@ const MovieDetails = () => {
               {movie.bookable !== false && (
                 <Link
                   to={`/book/${movie.id}`}
+                  state={{ movie }}
                   className="text-[11px] font-bold text-[#ff2e3b] hover:underline flex items-center gap-1"
                 >
                   <Coins className="w-3.5 h-3.5" /> Book &amp; review to win 100 coins

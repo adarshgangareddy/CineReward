@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const MovieTeam = require("../models/MovieTeam");
 const bcrypt = require("bcryptjs");
@@ -41,16 +42,16 @@ const authController = {
           .json({ message: "Password must be at least 6 characters" });
       }
 
-      let existingUser = await User.findOne({
+      const existingUser = await User.findOne({
         $or: [
           { email: normalizedEmail },
           ...(normalizedUsername ? [{ username: normalizedUsername }] : []),
         ],
       });
       if (existingUser) {
-        return res
-          .status(400)
-          .json({ message: "An account with this email or username already exists" });
+        return res.status(400).json({
+          message: "An account with this email or username already exists",
+        });
       }
 
       const salt = await bcrypt.genSalt(10);
@@ -71,9 +72,9 @@ const authController = {
       });
     } catch (err) {
       if (err.code === 11000) {
-        return res
-          .status(400)
-          .json({ message: "An account with this email or username already exists" });
+        return res.status(400).json({
+          message: "An account with this email or username already exists",
+        });
       }
       res.status(500).json({ message: "Server error", error: err.message });
     }
@@ -82,15 +83,21 @@ const authController = {
   login: async (req, res) => {
     try {
       const { identifier, email, password, secretKey } = req.body;
-      const loginIdentifier = (identifier || email || "").trim();
+      const loginIdentifier = (identifier || email || secretKey || "").trim();
       if (!loginIdentifier || !password) {
         return res
           .status(400)
-          .json({ message: "Email/username and password are required" });
+          .json({ message: "Email/username/secret key and password are required" });
       }
 
       const normalizedIdentifier = loginIdentifier.toLowerCase();
-      const adminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+      const adminEmail = (
+        process.env.SUPER_ADMIN_EMAIL ||
+        process.env.EMAIL_USER ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
       const adminUsername =
         process.env.SUPER_ADMIN_USERNAME?.trim().toLowerCase();
       const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
@@ -101,21 +108,11 @@ const authController = {
           (adminUsername && normalizedIdentifier === adminUsername)
       );
 
+      // 1. Admin authentication by email or username + password
       if (matchesAdminIdentity && adminPassword && password === adminPassword) {
-        if (!adminSecret || !/^\d{16}$/.test(adminSecret)) {
-          return res.status(503).json({
-            message:
-              "Super admin login is not configured. Add SUPER_ADMIN_SECRET_CODE with exactly 16 digits to backend/.env and restart the server.",
-          });
-        }
-
-        if (
-          !secretKey ||
-          secretKey.trim() !== adminSecret ||
-          !/^\d{16}$/.test(secretKey.trim())
-        ) {
+        if (secretKey && adminSecret && secretKey.trim() !== adminSecret) {
           return res.status(401).json({
-            message: "Admin login requires the correct 16-digit secret code",
+            message: "Admin secret code is incorrect",
           });
         }
 
@@ -136,45 +133,62 @@ const authController = {
         });
       }
 
-      // Movie Team authentication check
-      const team = await MovieTeam.findOne({ email: normalizedIdentifier });
-      if (team) {
-        const teamPasswordMatches = await bcrypt.compare(password, team.password);
-        if (secretKey) {
-          if (!teamPasswordMatches) {
-            return res
-              .status(401)
-              .json({ message: "Invalid movie team credentials" });
-          }
-          if (team.secretKey !== secretKey.trim()) {
-            return res
-              .status(401)
-              .json({ message: "Movie team secret key is incorrect" });
-          }
-          const token = jwt.sign(
-            { id: team._id, role: "movie_team" },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
-          );
-          return res.json({
-            token,
-            user: {
-              id: team._id,
-              name: team.name,
-              email: team.email,
-              role: "movie_team",
-              assignedMovies: team.assignedMovies,
-              freeTicketsCount: team.freeTicketsCount,
-            },
-          });
-        } else if (teamPasswordMatches) {
-          return res
-            .status(401)
-            .json({ message: "Movie team login requires the secret key" });
-        }
+      // Database required for MovieTeam and User lookups
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+          message:
+            "Database is currently disconnected. Please verify MONGODB_URI in backend/.env and try again.",
+        });
       }
 
-      // Regular User authentication
+      // 2. Movie Team login via Team Email OR Secret Key + Password
+      const teamQuery = secretKey
+        ? {
+            $or: [
+              { email: normalizedIdentifier },
+              { secretKey: secretKey.trim() },
+            ],
+          }
+        : {
+            $or: [
+              { email: normalizedIdentifier },
+              { secretKey: loginIdentifier },
+            ],
+          };
+
+      const team = await MovieTeam.findOne(teamQuery);
+      if (team) {
+        const teamPasswordMatches = await bcrypt.compare(password, team.password);
+        if (!teamPasswordMatches) {
+          return res
+            .status(401)
+            .json({ message: "Invalid movie team credentials" });
+        }
+        if (secretKey && team.secretKey !== secretKey.trim()) {
+          return res
+            .status(401)
+            .json({ message: "Movie team secret key is incorrect" });
+        }
+
+        const token = jwt.sign(
+          { id: team._id, role: "movie_team" },
+          process.env.JWT_SECRET,
+          { expiresIn: "7d" }
+        );
+        return res.json({
+          token,
+          user: {
+            id: team._id,
+            name: team.name,
+            email: team.email,
+            role: "movie_team",
+            assignedMovies: team.assignedMovies,
+            freeTicketsCount: team.freeTicketsCount,
+          },
+        });
+      }
+
+      // 3. Regular User login via Email or Username + Password
       const user = await User.findOne({
         $or: [
           { email: normalizedIdentifier },
@@ -225,11 +239,16 @@ const authController = {
             username: req.auth.username || process.env.SUPER_ADMIN_USERNAME,
             email:
               process.env.SUPER_ADMIN_EMAIL ||
+              process.env.EMAIL_USER ||
               req.auth.username ||
               "admin@cinereward.com",
             role: "super_admin",
           },
         });
+      }
+
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({ message: "Database disconnected" });
       }
 
       if (req.auth.role === "movie_team") {
@@ -329,11 +348,14 @@ const authController = {
       }
 
       const user = await User.findOne({ email: normalizedEmail });
-      if (!user) return res.status(404).json({ message: "No account found with that email" });
+      if (!user)
+        return res
+          .status(404)
+          .json({ message: "No account found with that email" });
 
       const token = crypto.randomBytes(20).toString("hex");
       user.resetPasswordToken = token;
-      user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+      user.resetPasswordExpires = Date.now() + 3600000;
       await user.save();
 
       const frontendUrl = (

@@ -5,6 +5,7 @@ import { ArrowLeft, Layers } from "lucide-react";
 import MovieCard from "../components/MovieCard";
 import CatalogFilterBar from "../components/CatalogFilterBar";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { getCached, setCached } from "../utils/cache";
 
 const CollectionDetail = () => {
   const { slug } = useParams();
@@ -24,7 +25,18 @@ const CollectionDetail = () => {
   });
 
   const fetchCollection = useCallback(async (targetSlug, activeFilters) => {
-    setLoading(true);
+    const cacheKey = `collection:${targetSlug}:${JSON.stringify(activeFilters)}`;
+    const cached = getCached(cacheKey);
+    const cachedList = getCached("collections:all");
+    if (cached) {
+      setCollection(cached.collection);
+      setItems(cached.items || []);
+      if (cachedList) setAllCollections(cachedList);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const [colRes, listRes] = await Promise.all([
         axios.get(`/api/movies/collections/${targetSlug}`, {
@@ -32,13 +44,20 @@ const CollectionDetail = () => {
         }),
         axios.get("/api/movies/collections"),
       ]);
-      setCollection(colRes.data.collection);
-      setItems(Array.isArray(colRes.data.items) ? colRes.data.items : []);
-      setAllCollections(Array.isArray(listRes.data) ? listRes.data : []);
+      const colData = colRes.data.collection;
+      const itemList = Array.isArray(colRes.data.items) ? colRes.data.items : [];
+      const colList = Array.isArray(listRes.data) ? listRes.data : [];
+      setCollection(colData);
+      setItems(itemList);
+      setAllCollections(colList);
+      setCached(cacheKey, { collection: colData, items: itemList });
+      setCached("collections:all", colList);
     } catch (err) {
       console.error("Failed to fetch collection:", err);
-      setCollection(null);
-      setItems([]);
+      if (!cached) {
+        setCollection(null);
+        setItems([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -98,8 +117,8 @@ const CollectionDetail = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20 pt-8">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen pb-24 lg:pb-20 pt-6 sm:pt-8">
+      <div className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8">
         <Link
           to="/collections"
           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-200 hover:text-white glass-button px-3.5 py-1.5 rounded-full mb-5 transition-colors"

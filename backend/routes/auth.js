@@ -8,19 +8,35 @@ const { isGoogleConfigured } = require("../middlewares/passport");
 
 const router = express.Router();
 
-const getFrontendURL = () =>
-  (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+const getFrontendURL = (req) => {
+  const configured = (process.env.FRONTEND_URL || "http://localhost:3000").replace(
+    /\/$/,
+    ""
+  );
+  const candidate = req?.query?.state || req?.query?.origin;
+  if (candidate && typeof candidate === "string") {
+    try {
+      const u = new URL(candidate);
+      if (
+        ["localhost", "127.0.0.1"].includes(u.hostname) ||
+        u.hostname.endsWith(".vercel.app") ||
+        candidate.replace(/\/$/, "") === configured
+      ) {
+        return candidate.replace(/\/$/, "");
+      }
+    } catch {
+      // ignore invalid origin
+    }
+  }
+  return configured;
+};
 
-/*
- * Check whether MongoDB is connected before handling
- * requests that require database access.
- */
 const requireDatabase = (req, res, next) => {
   const state = mongoose.connection.readyState;
 
   if (state !== 1) {
     if (req.path.startsWith("/google")) {
-      return res.redirect(`${getFrontendURL()}/login?error=db_unavailable`);
+      return res.redirect(`${getFrontendURL(req)}/login?error=db_unavailable`);
     }
     return res.status(503).json({
       message:
@@ -34,7 +50,9 @@ const requireDatabase = (req, res, next) => {
 
 const requireGoogleStrategy = (req, res, next) => {
   if (!isGoogleConfigured) {
-    return res.redirect(`${getFrontendURL()}/login?error=google_not_configured`);
+    return res.redirect(
+      `${getFrontendURL(req)}/login?error=google_not_configured`
+    );
   }
   next();
 };
@@ -75,7 +93,7 @@ router.get("/db-test", async (req, res) => {
 // ======================================================
 
 router.post("/signup", requireDatabase, authController.signup);
-router.post("/login", requireDatabase, authController.login);
+router.post("/login", authController.login);
 router.get("/me", authenticate, authController.me);
 router.post("/forgot-password", requireDatabase, authController.forgotPassword);
 router.post("/reset-password", requireDatabase, authController.resetPassword);
@@ -87,28 +105,29 @@ router.post("/reset-password", requireDatabase, authController.resetPassword);
 router.post("/phone", requireDatabase, authController.handlePhoneAuth);
 
 // ======================================================
-// Google OAuth
+// Google OAuth (Stateless JWT — no session cookie required)
 // ======================================================
 
-router.get(
-  "/google",
-  requireGoogleStrategy,
-  requireDatabase,
+router.get("/google", requireGoogleStrategy, requireDatabase, (req, res, next) => {
+  const originState = getFrontendURL(req);
   passport.authenticate("google", {
     scope: ["profile", "email"],
-  }),
-);
+    session: false,
+    state: originState,
+  })(req, res, next);
+});
 
 router.get(
   "/google/callback",
   requireGoogleStrategy,
   requireDatabase,
   (req, res, next) => {
-    const frontendURL = getFrontendURL();
+    const frontendURL = getFrontendURL(req);
 
     passport.authenticate(
       "google",
       {
+        session: false,
         failureRedirect: `${frontendURL}/login?error=true`,
       },
       (err, user, info) => {
@@ -124,11 +143,11 @@ router.get(
 
         req.user = user;
         next();
-      },
+      }
     )(req, res, next);
   },
   (req, res) => {
-    const frontendURL = getFrontendURL();
+    const frontendURL = getFrontendURL(req);
     try {
       if (!req.user) {
         return res.redirect(`${frontendURL}/login?error=true`);
@@ -146,7 +165,7 @@ router.get(
         process.env.JWT_SECRET,
         {
           expiresIn: "7d",
-        },
+        }
       );
 
       const userData = {
@@ -163,14 +182,14 @@ router.get(
 
       res.redirect(
         `${frontendURL}/login?token=${encodeURIComponent(
-          token,
-        )}&user=${encodeURIComponent(JSON.stringify(userData))}`,
+          token
+        )}&user=${encodeURIComponent(JSON.stringify(userData))}`
       );
     } catch (error) {
       console.error("[Google OAuth] JWT/redirect error:", error);
       return res.redirect(`${frontendURL}/login?error=redirect_failed`);
     }
-  },
+  }
 );
 
 module.exports = router;

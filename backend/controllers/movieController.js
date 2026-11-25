@@ -83,6 +83,16 @@ const movieController = {
     }
   },
 
+  getTheatres: async (req, res) => {
+    try {
+      const city = req.query.city || "Bengaluru";
+      const theatres = await tmdbService.getTheatres(req.params.id, city);
+      res.json(theatres);
+    } catch (err) {
+      res.status(500).json({ message: "Error loading theatres", error: err.message });
+    }
+  },
+
   search: async (req, res) => {
     try {
       const { q } = req.query;

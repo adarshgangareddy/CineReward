@@ -185,6 +185,8 @@ async function startServer() {
       console.log(`[v1.0.2] CineReward API is running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`Allowed origins: ${allowedOrigins.join(", ")}`);
+      const tmdbService = require("./services/tmdbService");
+      setTimeout(() => tmdbService.warmCache(), 250);
     });
 
     await connectMongoWithRetry();

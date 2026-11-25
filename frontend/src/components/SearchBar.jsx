@@ -90,6 +90,7 @@ const SearchBar = ({ modalMode = false, onNavigate }) => {
                 <Link
                   key={movie.id}
                   to={`/movie/${movie.id}`}
+                  state={{ movie }}
                   onClick={() => {
                     setIsOpen(false);
                     setQuery("");

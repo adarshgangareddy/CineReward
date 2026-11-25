@@ -6,3 +6,4 @@ export function resolveMoviePoster(posterPath, fallbackSeed = "cinema") {
   if (posterPath.startsWith("/")) return `${TMDB_IMAGE_BASE}${posterPath}`;
   return posterPath;
 }
+

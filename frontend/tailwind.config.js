@@ -21,6 +21,7 @@ export default {
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', '"Inter"', 'system-ui', 'sans-serif'],
+        brand: ['"Oswald"', '"Plus Jakarta Sans"', 'sans-serif'],
       },
     },
   },

@@ -15,8 +15,14 @@ import {
   Ticket,
   Sparkles,
   SlidersHorizontal,
+  Home as HomeIcon,
+  Tv,
+  Layers,
+  Grid,
+  PlaySquare,
 } from "lucide-react";
 import SearchBar from "./SearchBar";
+import BrandLogo from "./BrandLogo";
 import { clearAllSessions, safeParseJSON } from "../utils/auth";
 import { getWatchlist } from "../utils/watchlist";
 
@@ -85,11 +91,11 @@ const REWARDS_ITEMS = [
 ];
 
 const DROPDOWN_MENUS = [
-  { key: "genre", label: "Genre", subtitle: "Find your next favourite", items: GENRES },
-  { key: "category", label: "Category", subtitle: "Browse curated cinema categories", items: CATEGORIES },
-  { key: "ott", label: "OTT", subtitle: "Streaming platforms & networks", items: OTT_ITEMS },
-  { key: "collection", label: "Collection", subtitle: "Find your next favourite universe", items: COLLECTION_ITEMS },
-  { key: "rewards", label: "Rewards", subtitle: "Tickets, coins & CineReward hubs", items: REWARDS_ITEMS },
+  { key: "genre", label: "Genre", subtitle: "Find your next favourite", icon: Film, items: GENRES },
+  { key: "category", label: "Category", subtitle: "Browse curated cinema categories", icon: Grid, items: CATEGORIES },
+  { key: "ott", label: "OTT", subtitle: "Streaming platforms & networks", icon: Tv, items: OTT_ITEMS },
+  { key: "collection", label: "Collection", subtitle: "Find your next favourite universe", icon: Layers, items: COLLECTION_ITEMS },
+  { key: "rewards", label: "Rewards", subtitle: "Tickets, coins & CineReward hubs", icon: Sparkles, items: REWARDS_ITEMS },
 ];
 
 const CITIES = [
@@ -112,6 +118,7 @@ const Navbar = () => {
   const [watchlistCount, setWatchlistCount] = useState(() => getWatchlist().length);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
@@ -170,6 +177,7 @@ const Navbar = () => {
     setOpenDropdown(null);
     setIsAccountOpen(false);
     setIsMobileOpen(false);
+    setMobileExpanded(null);
   }, [location.pathname, location.search]);
 
   useEffect(() => {
@@ -186,6 +194,7 @@ const Navbar = () => {
   const handleCitySelect = (city) => {
     setSelectedCity(city);
     localStorage.setItem("selectedCity", city);
+    window.dispatchEvent(new CustomEvent("cinereward:city", { detail: city }));
     setIsLocationModalOpen(false);
   };
 
@@ -195,10 +204,18 @@ const Navbar = () => {
     setTeam(null);
     setSuperAdmin(null);
     setIsAccountOpen(false);
+    setIsMobileOpen(false);
     navigate("/login");
   };
 
   const activeMenu = DROPDOWN_MENUS.find((m) => m.key === openDropdown);
+
+  const isMoviesTab =
+    location.pathname.startsWith("/catalog") &&
+    !location.search.includes("section=shows");
+  const isSeriesTab =
+    location.pathname.startsWith("/catalog") &&
+    location.search.includes("section=shows");
 
   return (
     <>
@@ -207,20 +224,13 @@ const Navbar = () => {
         className={`sticky top-0 z-50 transition-all duration-300 ${
           scrolled
             ? "bg-[#07080d]/75 backdrop-blur-2xl border-b border-white/[0.08] shadow-[0_10px_40px_rgba(0,0,0,0.65)]"
-            : "bg-gradient-to-b from-black/75 via-black/35 to-transparent"
+            : "bg-gradient-to-b from-black/80 via-black/35 to-transparent"
         }`}
       >
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4 relative">
-          {/* Brand Logo */}
-          <Link to="/" className="flex items-center gap-2 shrink-0 group">
-            <div className="flex items-stretch font-black tracking-tighter text-lg sm:text-xl leading-none shadow-lg">
-              <span className="bg-[#e50914] text-white px-2 py-1 rounded-l-md uppercase">
-                CINE
-              </span>
-              <span className="border border-white/80 text-white px-2 py-1 rounded-r-md uppercase bg-black/40 group-hover:bg-white group-hover:text-black transition-colors">
-                REWARD
-              </span>
-            </div>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-[74px] sm:h-20 flex items-center justify-between gap-3 relative">
+          {/* Condensed Bold Brand Logo */}
+          <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
+            <BrandLogo size="sm" />
             {isLibraryPage && (
               <span className="hidden xl:inline-block text-[9px] font-bold tracking-[0.22em] text-slate-300 uppercase self-end pb-0.5">
                 LIBRARY
@@ -228,14 +238,14 @@ const Navbar = () => {
             )}
           </Link>
 
-          {/* Center Floating Glassmorphic Pill Nav + Wide Mega-Menu Anchor */}
+          {/* Desktop Centered Floating Glassmorphic Pill Nav */}
           <div className="hidden lg:flex flex-col items-center relative">
-            <nav className="flex items-center gap-1 bg-white/[0.07] backdrop-blur-2xl border border-white/[0.14] rounded-full px-2 py-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.5)]">
+            <nav className="flex items-center gap-2 bg-black/45 backdrop-blur-2xl border border-white/[0.15] rounded-full px-2.5 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.55)]">
               <Link
                 to="/"
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all ${
                   location.pathname === "/"
-                    ? "bg-white/[0.18] text-white shadow-inner"
+                    ? "bg-white/[0.16] text-white shadow-inner"
                     : "text-slate-200 hover:text-white hover:bg-white/[0.08]"
                 }`}
               >
@@ -249,7 +259,7 @@ const Navbar = () => {
                     key={menu.key}
                     type="button"
                     onClick={() => setOpenDropdown(isOpen ? null : menu.key)}
-                    className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-medium transition-all ${
                       isOpen
                         ? "bg-white/[0.16] text-white"
                         : "text-slate-200 hover:text-white hover:bg-white/[0.08]"
@@ -257,7 +267,7 @@ const Navbar = () => {
                   >
                     <span>{menu.label}</span>
                     <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      className={`w-3.5 h-3.5 opacity-80 transition-transform duration-200 ${
                         isOpen ? "rotate-180" : ""
                       }`}
                     />
@@ -266,9 +276,9 @@ const Navbar = () => {
               })}
             </nav>
 
-            {/* Wide Frosted Glass 4-Column Mega-Menu (Matching Screenshots 2, 3, 4) */}
+            {/* Wide Frosted Glass 4-Column Mega-Menu */}
             {activeMenu && (
-              <div className="absolute top-14 left-1/2 -translate-x-1/2 w-[660px] max-w-[92vw] bg-[#10131e]/90 backdrop-blur-3xl border border-white/[0.15] rounded-2xl p-6 shadow-[0_32px_90px_rgba(0,0,0,0.85)] z-50">
+              <div className="absolute top-14 left-1/2 -translate-x-1/2 w-[680px] max-w-[92vw] bg-[#101420]/85 backdrop-blur-3xl border border-white/[0.15] rounded-2xl p-6 shadow-[0_32px_90px_rgba(0,0,0,0.85)] z-50">
                 <div className="mb-4">
                   <h3 className="text-base font-bold text-white leading-tight">
                     {activeMenu.label}
@@ -294,14 +304,13 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Right Action Cluster */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Right Action Cluster (Mobile + Desktop clean circular glass buttons) */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <button
               type="button"
               onClick={() => setIsSearchOpen(true)}
               aria-label="Search movies and shows"
-              title="Search movies, series & collections"
-              className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] flex items-center justify-center text-white transition-all"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.14] flex items-center justify-center text-white transition-all"
             >
               <Search className="w-4 h-4" />
             </button>
@@ -309,8 +318,7 @@ const Navbar = () => {
             <Link
               to="/watchlist"
               aria-label="My Watchlist"
-              title="My Watchlist"
-              className="relative w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] flex items-center justify-center text-white transition-all"
+              className="hidden sm:flex relative w-10 h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.14] items-center justify-center text-white transition-all"
             >
               <Bookmark className="w-4 h-4" />
               {watchlistCount > 0 && (
@@ -322,9 +330,8 @@ const Navbar = () => {
 
             <Link
               to="/catalog"
-              aria-label="Explore full catalog"
-              title="Explore Catalog & Filters"
-              className="hidden sm:flex w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.12] items-center justify-center text-white transition-all"
+              aria-label="Catalog filters"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.08] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.14] flex items-center justify-center text-white transition-all"
             >
               <SlidersHorizontal className="w-4 h-4" />
             </Link>
@@ -332,12 +339,13 @@ const Navbar = () => {
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(true)}
-              className="hidden md:flex items-center gap-1.5 bg-white/[0.07] hover:bg-white/[0.14] backdrop-blur-xl border border-white/[0.12] rounded-full px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white transition-all"
+              className="hidden md:flex items-center gap-1.5 bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.14] rounded-full px-3.5 py-2 text-xs font-medium text-slate-200 hover:text-white transition-all"
             >
               <MapPin className="w-3.5 h-3.5 text-[#ff2e3b]" />
               <span>{selectedCity}</span>
             </button>
 
+            {/* Auth / Role Trigger */}
             {user ? (
               <div className="flex items-center gap-2">
                 <Link
@@ -353,7 +361,7 @@ const Navbar = () => {
                     type="button"
                     onClick={() => setIsAccountOpen(!isAccountOpen)}
                     aria-expanded={isAccountOpen}
-                    className="flex items-center gap-2 bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl border border-white/[0.14] rounded-full pl-1.5 pr-3 py-1 transition-all"
+                    className="flex items-center gap-2 bg-white/[0.08] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.15] rounded-full p-1 sm:pl-1.5 sm:pr-3 sm:py-1 transition-all"
                   >
                     {user.profilePicture ? (
                       <img
@@ -369,7 +377,7 @@ const Navbar = () => {
                     <span className="hidden xl:inline text-xs font-semibold text-white max-w-[90px] truncate">
                       {user.name}
                     </span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
+                    <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-slate-300" />
                   </button>
 
                   {isAccountOpen && (
@@ -414,10 +422,10 @@ const Navbar = () => {
                 </div>
               </div>
             ) : team ? (
-              <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
                 <Link
                   to="/team/dashboard"
-                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#e50914]/25 backdrop-blur-xl border border-[#e50914]/45 px-3.5 py-1.5 rounded-full hover:bg-[#e50914]/35 transition-all"
+                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#e50914]/25 backdrop-blur-xl border border-[#e50914]/45 px-3.5 py-2 rounded-full hover:bg-[#e50914]/35 transition-all"
                 >
                   <Film className="w-3.5 h-3.5 text-[#ff2e3b]" />
                   <span>Team Hub</span>
@@ -426,16 +434,16 @@ const Navbar = () => {
                   type="button"
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.12] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
+                  className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.14] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : superAdmin ? (
-              <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
                 <Link
                   to="/super-admin-dashboard"
-                  className="flex items-center gap-1.5 text-xs font-bold text-red-200 bg-red-500/20 backdrop-blur-xl border border-red-500/40 px-3.5 py-1.5 rounded-full hover:bg-red-500/30 transition-all"
+                  className="flex items-center gap-1.5 text-xs font-bold text-red-200 bg-red-500/20 backdrop-blur-xl border border-red-500/40 px-3.5 py-2 rounded-full hover:bg-red-500/30 transition-all"
                 >
                   <Shield className="w-3.5 h-3.5 text-red-400" />
                   <span>Admin Hub</span>
@@ -444,7 +452,7 @@ const Navbar = () => {
                   type="button"
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.12] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
+                  className="w-10 h-10 rounded-full bg-white/[0.08] hover:bg-red-500/20 border border-white/[0.14] flex items-center justify-center text-slate-200 hover:text-red-400 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -452,70 +460,228 @@ const Navbar = () => {
             ) : (
               <Link
                 to="/login"
-                className="btn-crimson px-4 sm:px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5"
+                className="hidden sm:flex btn-crimson px-5 py-2 rounded-full text-xs font-bold items-center gap-1.5"
               >
                 <User className="w-3.5 h-3.5" />
                 <span>Sign In</span>
               </Link>
             )}
 
+            {/* Mobile Hamburger Menu Button */}
             <button
               type="button"
-              onClick={() => setIsMobileOpen(!isMobileOpen)}
-              aria-label="Toggle mobile menu"
-              className="lg:hidden w-9 h-9 rounded-full bg-white/[0.08] border border-white/[0.12] flex items-center justify-center text-white"
+              onClick={() => setIsMobileOpen(true)}
+              aria-label="Open Explore Menu"
+              className="lg:hidden w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.18] backdrop-blur-xl border border-white/[0.14] flex items-center justify-center text-white"
             >
-              {isMobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              <Menu className="w-4 h-4" />
             </button>
           </div>
         </div>
-
-        {/* Mobile Drawer */}
-        {isMobileOpen && (
-          <div className="lg:hidden bg-[#0e111b]/95 backdrop-blur-2xl border-t border-white/[0.1] px-6 py-5 space-y-4">
-            <SearchBar />
-            <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-              <Link to="/" className="glass-card rounded-xl px-3.5 py-2.5 text-white">
-                Home
-              </Link>
-              <Link to="/catalog" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                All Movies
-              </Link>
-              <Link to="/collections" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                Collections
-              </Link>
-              <Link to="/catalog?section=shows" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                TV &amp; Series
-              </Link>
-              <Link to="/watchlist" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                Watchlist ({watchlistCount})
-              </Link>
-              <Link to="/list-your-show" className="glass-card rounded-xl px-3.5 py-2.5 text-slate-200">
-                List Your Show
-              </Link>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setIsMobileOpen(false);
-                setIsLocationModalOpen(true);
-              }}
-              className="w-full flex items-center justify-center gap-2 glass-card rounded-xl py-2.5 text-xs font-semibold text-slate-200"
-            >
-              <MapPin className="w-3.5 h-3.5 text-[#ff2e3b]" /> City: {selectedCity}
-            </button>
-          </div>
-        )}
       </header>
+
+      {/* Mobile Full-Screen Blurred Glass Overlay Sidebar (Matching Screenshot 9d074739.jpg) */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-2xl flex items-start justify-end sm:justify-center p-4 overflow-y-auto"
+          onClick={() => setIsMobileOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm mt-2 bg-[#111521]/90 backdrop-blur-3xl border border-white/[0.16] rounded-3xl p-6 shadow-[0_32px_90px_rgba(0,0,0,0.9)] text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-base font-bold tracking-tight">
+                Explore CineReward
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsMobileOpen(false)}
+                aria-label="Close menu"
+                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.14] flex items-center justify-center text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <Link
+                to="/"
+                onClick={() => setIsMobileOpen(false)}
+                className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-white/[0.06] text-sm font-semibold"
+              >
+                <HomeIcon className="w-4 h-4 text-slate-300" />
+                <span>Home</span>
+              </Link>
+
+              {DROPDOWN_MENUS.map((menu) => {
+                const Icon = menu.icon;
+                const expanded = mobileExpanded === menu.key;
+                return (
+                  <div key={menu.key}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileExpanded(expanded ? null : menu.key)}
+                      className="w-full flex items-center justify-between px-2 py-2.5 rounded-xl hover:bg-white/[0.06] text-sm font-medium text-slate-200"
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className="w-4 h-4 text-slate-300" />
+                        <span>{menu.label}</span>
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform ${
+                          expanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {expanded && (
+                      <div className="grid grid-cols-2 gap-1.5 pl-9 pr-2 py-2">
+                        {menu.items.map((item) => (
+                          <Link
+                            key={item.to + item.label}
+                            to={item.to}
+                            onClick={() => setIsMobileOpen(false)}
+                            className="text-xs text-slate-300 hover:text-white py-1 truncate"
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileOpen(false);
+                  setIsLocationModalOpen(true);
+                }}
+                className="w-full flex items-center justify-between px-2 py-2.5 rounded-xl hover:bg-white/[0.06] text-sm font-medium text-slate-200"
+              >
+                <span className="flex items-center gap-3">
+                  <MapPin className="w-4 h-4 text-[#ff2e3b]" />
+                  <span>City: {selectedCity}</span>
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-white/[0.12] flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-slate-300">
+              <Link to="/catalog?section=featured" onClick={() => setIsMobileOpen(false)} className="hover:text-white">
+                Movies
+              </Link>
+              <Link to="/catalog?section=shows" onClick={() => setIsMobileOpen(false)} className="hover:text-white">
+                Series
+              </Link>
+              <Link to="/watchlist" onClick={() => setIsMobileOpen(false)} className="hover:text-white">
+                My List
+              </Link>
+              {user ? (
+                <Link to="/dashboard" onClick={() => setIsMobileOpen(false)} className="text-[#ff2e3b] font-bold">
+                  Dashboard
+                </Link>
+              ) : team ? (
+                <Link to="/team/dashboard" onClick={() => setIsMobileOpen(false)} className="text-[#ff2e3b] font-bold">
+                  Team Hub
+                </Link>
+              ) : superAdmin ? (
+                <Link to="/super-admin-dashboard" onClick={() => setIsMobileOpen(false)} className="text-[#ff2e3b] font-bold">
+                  Admin Hub
+                </Link>
+              ) : (
+                <Link to="/login" onClick={() => setIsMobileOpen(false)} className="text-[#ff2e3b] font-bold">
+                  Sign In
+                </Link>
+              )}
+            </div>
+
+            {(user || team || superAdmin) && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full mt-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-xs font-bold text-red-300"
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Floating Bottom Glass Navigation Dock (Matching 4b102f2a.jpg / d6323759.jpg) */}
+      <nav
+        aria-label="Mobile quick navigation"
+        className="lg:hidden fixed bottom-3.5 inset-x-4 z-40 bg-[#0d111a]/80 backdrop-blur-2xl border border-white/[0.16] rounded-full px-2 py-1.5 flex items-center justify-around shadow-[0_18px_50px_rgba(0,0,0,0.85)]"
+      >
+        <Link
+          to="/"
+          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+            location.pathname === "/"
+              ? "bg-white/[0.14] text-white"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <HomeIcon className="w-4 h-4 mb-0.5" />
+          <span>Home</span>
+        </Link>
+
+        <Link
+          to="/catalog?section=featured"
+          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+            isMoviesTab
+              ? "bg-white/[0.14] text-white"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <PlaySquare className="w-4 h-4 mb-0.5" />
+          <span>Movies</span>
+        </Link>
+
+        <Link
+          to="/catalog?section=shows"
+          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+            isSeriesTab
+              ? "bg-white/[0.14] text-white"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Tv className="w-4 h-4 mb-0.5" />
+          <span>Series</span>
+        </Link>
+
+        <Link
+          to="/watchlist"
+          className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+            location.pathname === "/watchlist"
+              ? "bg-white/[0.14] text-white"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Bookmark className="w-4 h-4 mb-0.5" />
+          <span>My List</span>
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => setIsSearchOpen(true)}
+          aria-label="Open Search"
+          className="flex flex-col items-center justify-center px-3.5 py-1.5 rounded-full text-[10px] font-medium text-slate-400 hover:text-white transition-all"
+        >
+          <Search className="w-4 h-4 mb-0.5" />
+          <span>Search</span>
+        </button>
+      </nav>
 
       {/* Glassmorphic Search Modal */}
       {isSearchOpen && (
         <div
-          className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-xl flex items-start justify-center pt-20 px-4"
+          className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-2xl flex items-start justify-center pt-16 sm:pt-20 px-4"
           onClick={() => setIsSearchOpen(false)}
         >
           <div
-            className="glass-panel rounded-3xl w-full max-w-2xl p-6 relative"
+            className="glass-panel rounded-3xl w-full max-w-2xl p-5 sm:p-6 relative"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
@@ -556,7 +722,7 @@ const Navbar = () => {
       {/* City Selector Glass Modal */}
       {isLocationModalOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-xl p-4"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-2xl p-4"
           onClick={() => setIsLocationModalOpen(false)}
         >
           <div

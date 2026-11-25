@@ -4,8 +4,7 @@ export const DEFAULT_BACKDROP =
 export function setActiveBackdrop(url, mode = "ambient") {
   window.dispatchEvent(
     new CustomEvent("cinereward:backdrop", {
-      detail: { url: url || DEFAULT_BACKDROP, mode },
+      detail: { url: url === null ? "" : url || DEFAULT_BACKDROP, mode },
     })
   );
 }
-

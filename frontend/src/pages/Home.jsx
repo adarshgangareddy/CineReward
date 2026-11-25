@@ -26,6 +26,7 @@ import MovieCard from "../components/MovieCard";
 import { resolveMoviePoster } from "../utils/media";
 import { isInWatchlist, toggleWatchlist } from "../utils/watchlist";
 import { setActiveBackdrop } from "../utils/backdrop";
+import { getCached, setCached } from "../utils/cache";
 
 const BROWSE_CATEGORIES = [
   {
@@ -129,7 +130,7 @@ const CarouselSection = ({ eyebrow = "YOUR NEXT DISCOVERY", title, viewAllTo, it
   };
 
   return (
-    <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-7">
+    <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-7">
       <div className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500 mb-1">
@@ -220,6 +221,7 @@ const LeaderboardCard = ({ eyebrow, title, viewAllTo, items = [] }) => {
             >
               <Link
                 to={`/movie/${item.id}`}
+                state={{ movie: item }}
                 className="flex items-center gap-3.5 min-w-0 flex-grow"
               >
                 <span className="w-7 text-lg font-extrabold text-slate-600 group-hover:text-slate-400 tabular-nums shrink-0">
@@ -266,8 +268,9 @@ const LeaderboardCard = ({ eyebrow, title, viewAllTo, items = [] }) => {
 };
 
 const Home = () => {
-  const [feed, setFeed] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const cachedHome = getCached("home_feed");
+  const [feed, setFeed] = useState(cachedHome);
+  const [loading, setLoading] = useState(!cachedHome);
   const [slideIndex, setSlideIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [, setWatchTick] = useState(0);
@@ -276,9 +279,12 @@ const Home = () => {
   useEffect(() => {
     const loadHome = async () => {
       try {
-        setLoading(true);
+        if (!getCached("home_feed")) setLoading(true);
         const res = await axios.get("/api/movies/home");
-        setFeed(res.data);
+        if (res.data) {
+          setFeed(res.data);
+          setCached("home_feed", res.data);
+        }
       } catch (err) {
         console.error("Failed to fetch home feed:", err);
       } finally {
@@ -316,7 +322,7 @@ const Home = () => {
     .slice(0, 3);
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-24 lg:pb-20">
       {/* 1. Full-Bleed Cinematic Hero Spotlight Carousel (Screenshot 3) */}
       {activeSlide && (
         <section
@@ -335,7 +341,7 @@ const Home = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-[#07080d]/95 via-[#07080d]/55 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#07080d]/95 via-[#07080d]/20 to-[#07080d]/45" />
 
-          <div className="relative z-10 max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 pb-12 pt-16">
+          <div className="relative z-10 max-w-[1400px] mx-auto w-full px-5 sm:px-6 lg:px-8 pb-10 sm:pb-12 pt-16">
             <div className="max-w-2xl">
               <div className="flex items-center gap-2.5 mb-3">
                 <span className="w-5 h-0.5 bg-[#e50914] inline-block" />
@@ -344,7 +350,7 @@ const Home = () => {
                 </span>
               </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.05] mb-4">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.05] mb-3.5">
                 {activeSlide.title}
               </h1>
 
@@ -377,10 +383,11 @@ const Home = () => {
                     navigate(
                       activeSlide.bookable !== false
                         ? `/book/${activeSlide.id}`
-                        : `/movie/${activeSlide.id}`
+                        : `/movie/${activeSlide.id}`,
+                      { state: { movie: activeSlide } }
                     )
                   }
-                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition-all flex items-center gap-2 shadow-xl"
+                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm px-5 sm:px-6 py-3 rounded-xl transition-all flex items-center gap-2 shadow-xl"
                 >
                   <Play className="w-4 h-4 fill-slate-950" />
                   <span>
@@ -390,6 +397,7 @@ const Home = () => {
 
                 <Link
                   to={`/movie/${activeSlide.id}`}
+                  state={{ movie: activeSlide }}
                   className="glass-button font-semibold text-xs sm:text-sm px-5 py-3 rounded-xl flex items-center gap-2"
                 >
                   <Info className="w-4 h-4" />
@@ -476,7 +484,7 @@ const Home = () => {
       )}
 
       {/* 2. Rewards Promo Banner (Matching Screenshot 3 Telegram Glass Banner) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mt-4 mb-4">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 mt-4 mb-4">
         <div className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-r from-[#0e3455]/90 via-[#0b4b7a]/80 to-[#0e223d]/90 backdrop-blur-xl px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-sky-400/20 border border-sky-300/30 flex items-center justify-center shrink-0">
@@ -532,7 +540,7 @@ const Home = () => {
       />
 
       {/* 4. Discover Collections Banner (Screenshot 9) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-8">
         <div className="glass-card rounded-3xl p-8 sm:p-12 relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-10">
           <div className="max-w-lg relative z-10">
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400 mb-3">
@@ -582,7 +590,7 @@ const Home = () => {
       </section>
 
       {/* 5. Top Movies & Top Shows Split Leaderboards (Screenshot 9) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <LeaderboardCard
             eyebrow="TOP RATED • VOTED BY FANS"
@@ -600,7 +608,7 @@ const Home = () => {
       </section>
 
       {/* 6. Landing Spotlight Split + Browse by Category + Why Choose (Screenshots 1 & 2) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-6 space-y-6">
             <div className="inline-flex items-center gap-2 bg-[#e50914]/10 border border-[#e50914]/30 px-3.5 py-1.5 rounded-full text-[11px] font-bold text-rose-300">
@@ -674,7 +682,7 @@ const Home = () => {
       </section>
 
       {/* Browse by Category (Screenshot 2) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-10">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Browse by Category
@@ -703,7 +711,7 @@ const Home = () => {
       </section>
 
       {/* Why Choose CineReward? (Screenshot 2) */}
-      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <section className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Why Choose <span className="text-[#ff2e3b]">CineReward?</span>

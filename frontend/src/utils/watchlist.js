@@ -43,3 +43,4 @@ export function toggleWatchlist(movie) {
   window.dispatchEvent(new Event("watchlistUpdated"));
   return next;
 }
+

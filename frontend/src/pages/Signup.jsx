@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { User, Mail, Lock, UserPlus, ArrowRight, Eye, EyeOff } from "lucide-react";
+import BrandLogo from "../components/BrandLogo";
 import { getActiveSession, getApiBaseURL, saveRoleSession } from "../utils/auth";
 
 const Signup = () => {
@@ -40,7 +41,7 @@ const Signup = () => {
         password: formData.password,
       });
       saveRoleSession("user", res.data.user, res.data.token);
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "Signup failed. Please try again.");
     } finally {
@@ -50,22 +51,19 @@ const Signup = () => {
 
   const handleGoogleSignup = () => {
     const apiBaseURL = getApiBaseURL();
-    window.location.href = `${apiBaseURL}/api/auth/google`;
+    window.location.href = `${apiBaseURL}/api/auth/google?origin=${encodeURIComponent(
+      window.location.origin
+    )}`;
   };
 
   return (
-    <div className="min-h-[85vh] flex justify-center items-center px-4 py-12 relative overflow-hidden">
+    <div className="min-h-[calc(100vh-5rem)] flex justify-center items-center px-5 pt-6 pb-28 lg:pt-10 lg:pb-16 relative overflow-hidden">
       <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-[#e50914]/15 rounded-full blur-[140px] pointer-events-none" />
 
-      <div className="glass-panel rounded-3xl p-8 sm:p-10 w-full max-w-md relative z-10">
+      <div className="glass-panel rounded-3xl p-7 sm:p-10 w-full max-w-md relative z-10">
         <div className="text-center mb-7">
-          <div className="inline-flex items-stretch font-black tracking-tighter text-xl leading-none mb-3">
-            <span className="bg-[#e50914] text-white px-2.5 py-1 rounded-l-md uppercase">
-              CINE
-            </span>
-            <span className="border border-white/80 text-white px-2.5 py-1 rounded-r-md uppercase bg-black/40">
-              REWARD
-            </span>
+          <div className="mb-3 flex justify-center">
+            <BrandLogo />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Create your account

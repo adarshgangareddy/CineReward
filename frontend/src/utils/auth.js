@@ -118,3 +118,4 @@ export function getTokenForApiUrl(url = "") {
   }
   return team?.token || superAdmin?.token || null;
 }
+

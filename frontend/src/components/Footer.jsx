@@ -1,18 +1,14 @@
 import { Link } from "react-router-dom";
+import BrandLogo from "./BrandLogo";
 
 const Footer = () => {
   return (
-    <footer className="bg-[#07080d]/70 backdrop-blur-2xl border-t border-white/[0.08] py-12 px-6">
+    <footer className="bg-[#07080d]/70 backdrop-blur-2xl border-t border-white/[0.08] pt-12 pb-24 lg:pb-12 px-5 sm:px-6">
       <div className="max-w-[1400px] mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start gap-8 pb-8 border-b border-white/[0.06]">
           <div className="max-w-lg">
-            <Link to="/" className="inline-flex items-stretch font-black tracking-tighter text-lg leading-none mb-4">
-              <span className="bg-[#e50914] text-white px-2 py-1 rounded-l-md uppercase">
-                CINE
-              </span>
-              <span className="border border-white/80 text-white px-2 py-1 rounded-r-md uppercase bg-black/40">
-                REWARD
-              </span>
+            <Link to="/" className="inline-block mb-4">
+              <BrandLogo />
             </Link>
             <p className="text-slate-400 text-xs leading-relaxed">
               CineReward blends next-gen cinema discovery with live theatre seat booking,

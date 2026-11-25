@@ -2,30 +2,46 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "axios";
 import { DEFAULT_BACKDROP } from "../utils/backdrop";
+import { getCached, setCached } from "../utils/cache";
 
 const AmbientBackdrop = () => {
   const location = useLocation();
-  const [defaultUrl, setDefaultUrl] = useState(DEFAULT_BACKDROP);
-  const [backdropUrl, setBackdropUrl] = useState(DEFAULT_BACKDROP);
-  const [mode, setMode] = useState("ambient"); // "hero" | "detail" | "ambient"
+  const [defaultUrl, setDefaultUrl] = useState(() => {
+    const home = getCached("home_feed");
+    return home?.heroSlides?.[0]?.backdrop_path || DEFAULT_BACKDROP;
+  });
+  const [backdropUrl, setBackdropUrl] = useState(() => {
+    if (location.pathname.startsWith("/movie/")) return "";
+    return defaultUrl;
+  });
+  const [mode, setMode] = useState(
+    location.pathname.startsWith("/movie/") ? "detail" : "ambient"
+  );
 
   useEffect(() => {
+    const home = getCached("home_feed");
+    if (home?.heroSlides?.[0]?.backdrop_path) return;
     axios
       .get("/api/movies/home")
       .then((res) => {
+        if (res.data) setCached("home_feed", res.data);
         const first = res.data?.heroSlides?.[0]?.backdrop_path;
         if (first) {
           setDefaultUrl(first);
-          setBackdropUrl((prev) => (prev === DEFAULT_BACKDROP ? first : prev));
+          setBackdropUrl((prev) =>
+            prev === DEFAULT_BACKDROP && !location.pathname.startsWith("/movie/")
+              ? first
+              : prev
+          );
         }
       })
       .catch(() => {});
-  }, []);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handler = (e) => {
-      if (e.detail?.url) {
-        setBackdropUrl(e.detail.url);
+      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, "url")) {
+        setBackdropUrl(e.detail.url || "");
       }
       if (e.detail?.mode) {
         setMode(e.detail.mode);
@@ -36,11 +52,11 @@ const AmbientBackdrop = () => {
   }, []);
 
   useEffect(() => {
-    // Reset to ambient mode when leaving Home/MovieDetails
-    if (
-      location.pathname !== "/" &&
-      !location.pathname.startsWith("/movie/")
-    ) {
+    if (location.pathname === "/") {
+      setMode("hero");
+    } else if (location.pathname.startsWith("/movie/")) {
+      setMode("detail");
+    } else {
       setMode("ambient");
       setBackdropUrl(defaultUrl);
     }
@@ -54,20 +70,22 @@ const AmbientBackdrop = () => {
       aria-hidden="true"
       className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#07080d]"
     >
-      <img
-        key={backdropUrl}
-        src={backdropUrl}
-        alt=""
-        className={`w-full h-full object-cover object-center transition-all duration-700 ${
-          isDetail
-            ? "opacity-80 scale-100"
-            : isHero
-              ? "opacity-50 scale-[1.03]"
-              : "opacity-35 scale-[1.04]"
-        }`}
-      />
+      {backdropUrl && (
+        <img
+          key={backdropUrl}
+          src={backdropUrl}
+          alt=""
+          className={`w-full h-full object-cover object-center transition-opacity duration-500 ${
+            isDetail
+              ? "opacity-80 scale-100"
+              : isHero
+                ? "opacity-45 scale-[1.03]"
+                : "opacity-35 scale-[1.04]"
+          }`}
+        />
+      )}
 
-      {/* Cinema directional vignette keeping backdrop bright & clear while text stays readable */}
+      {/* Cinema directional vignette keeping backdrop clear while text stays legible */}
       <div
         className={`absolute inset-0 ${
           isDetail
@@ -83,7 +101,6 @@ const AmbientBackdrop = () => {
         }`}
       />
 
-      {/* Subtle crimson cinema atmosphere glow */}
       <div className="absolute -top-40 left-1/4 w-[620px] h-[420px] bg-[#e50914]/15 rounded-full blur-[160px]" />
     </div>
   );

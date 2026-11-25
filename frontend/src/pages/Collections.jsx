@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { resolveMoviePoster } from "../utils/media";
+import { getCached, setCached } from "../utils/cache";
 
 const CATEGORY_TABS = [
   "All",
@@ -15,15 +16,19 @@ const CATEGORY_TABS = [
 ];
 
 const Collections = () => {
-  const [collections, setCollections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [collections, setCollections] = useState(
+    () => getCached("collections:all") || []
+  );
+  const [loading, setLoading] = useState(() => !getCached("collections:all"));
   const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
     const fetchCollections = async () => {
       try {
         const res = await axios.get("/api/movies/collections");
-        setCollections(Array.isArray(res.data) ? res.data : []);
+        const list = Array.isArray(res.data) ? res.data : [];
+        setCollections(list);
+        setCached("collections:all", list);
       } catch (err) {
         console.error("Error fetching collections:", err);
       } finally {
@@ -43,8 +48,8 @@ const Collections = () => {
       : collections.filter((c) => c.category === activeCategory);
 
   return (
-    <div className="min-h-screen pb-20 pt-8">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen pb-24 lg:pb-20 pt-6 sm:pt-8">
+      <div className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8">
         <div className="mb-8">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400 mb-2">
             STORIES THAT BELONG TOGETHER

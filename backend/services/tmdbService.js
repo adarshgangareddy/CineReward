@@ -383,10 +383,62 @@ async function tmdbGet(path, params = {}, ttl = SHORT_TTL) {
 
   const response = await axios.get(`${TMDB_BASE_URL}${path}`, {
     params: { api_key: apiKey, ...params },
-    timeout: 10000,
+    timeout: 5000,
   });
   setCachedData(cacheKey, response.data);
   return response.data;
+}
+
+const CITY_AREA_MAP = {
+  Hyderabad: ["Gachibowli", "Jubilee Hills", "Banjara Hills", "Hitec City", "Kukatpally", "Madhapur", "Necklace Road", "Ameerpet", "Kondapur", "Secunderabad"],
+  Bengaluru: ["Indiranagar", "Koramangala", "Whitefield", "Rajajinagar", "MG Road", "Jayanagar", "Yelahanka", "Bellandur", "Hebbal", "Malleshwaram"],
+  Mumbai: ["Lower Parel", "Bandra West", "Andheri West", "Juhu", "Worli", "Powai", "Malad", "Goregaon", "Thane", "Colaba"],
+  "Delhi-NCR": ["Saket", "Connaught Place", "Vasant Kunj", "Gurugram CyberHub", "Noida Sec 18", "Dwarka", "Chanakyapuri", "Rohini", "Nehru Place", "Rajouri Garden"],
+  Chennai: ["Royapettah", "Velachery", "Anna Nagar", "Adyar", "T. Nagar", "Nungambakkam", "OMR Navalur", "Vadapalani", "Guindy", "Porur"],
+};
+
+const THEATRE_TEMPLATES = [
+  { name: "AMB Cinemas", badge: "Dolby Atmos • 4K Laser", formats: ["2D", "3D", "Dolby Atmos"], price: 320, amenities: ["M-Ticket", "Dolby Atmos", "Gourmet F&B"] },
+  { name: "PVR ICON: Laserplex", badge: "IMAX 4K • Dolby 7.1", formats: ["IMAX 2D", "IMAX 3D", "2D"], price: 420, amenities: ["M-Ticket", "IMAX Laser", "Recliners"] },
+  { name: "INOX Megaplex", badge: "Insignia • Dolby Atmos", formats: ["2D", "3D", "4DX"], price: 360, amenities: ["M-Ticket", "Food & Beverage", "Valet"] },
+  { name: "Prasads Multiplex", badge: "PCX Giant Screen", formats: ["2D", "3D", "IMAX 2D"], price: 295, amenities: ["M-Ticket", "PCX Screen", "Food Court"] },
+  { name: "Cinepolis VIP", badge: "Luxury Recliners • 4K", formats: ["2D", "3D"], price: 450, amenities: ["M-Ticket", "Butler Service", "Recliners"] },
+  { name: "Asian Mukta A2 Cinemas", badge: "RGB 4K Laser • Dolby", formats: ["2D", "3D"], price: 240, amenities: ["M-Ticket", "Food & Beverage"] },
+  { name: "Sathyam Cinemas", badge: "RDX Atmos • Pure Sound", formats: ["2D", "Dolby Atmos"], price: 260, amenities: ["M-Ticket", "RDX Audio", "Popcorn Bar"] },
+  { name: "Miraj Cinemas", badge: "Dolby Digital 7.1", formats: ["2D", "3D"], price: 220, amenities: ["M-Ticket", "Budget Friendly"] },
+  { name: "PVR Director's Cut", badge: "Gold Class • Luxe", formats: ["2D", "IMAX 2D"], price: 490, amenities: ["M-Ticket", "Lounge Access", "Recliners"] },
+  { name: "IMAX Central Plaza", badge: "Dual Laser IMAX", formats: ["IMAX 2D", "IMAX 3D", "4DX"], price: 390, amenities: ["M-Ticket", "IMAX Laser", "Food & Beverage"] },
+];
+
+function buildTheatresForMovie(movieId, city = "Hyderabad") {
+  const areas = CITY_AREA_MAP[city] || CITY_AREA_MAP.Bengaluru;
+  const seed = String(movieId)
+    .split("")
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+
+  return THEATRE_TEMPLATES.map((tpl, idx) => {
+    const area = areas[(idx + seed) % areas.length];
+    const baseTimes = ["09:45 AM", "12:30 PM", "03:45 PM", "07:15 PM", "10:30 PM"];
+    const slots = baseTimes.map((t, sIdx) => ({
+      time: t,
+      status: (idx + sIdx + seed) % 4 === 0 ? "fast" : "available",
+      screen: idx === 0 ? "Screen 1 • Laser Atmos" : `Audi ${(idx % 6) + 1}`,
+    }));
+
+    return {
+      id: `th-${idx + 1}`,
+      name: `${tpl.name}: ${area}`,
+      shortName: tpl.name,
+      area,
+      city,
+      badge: tpl.badge,
+      formats: tpl.formats,
+      basePrice: tpl.price,
+      amenities: tpl.amenities,
+      cancellable: idx % 2 === 0,
+      slots,
+    };
+  });
 }
 
 const tmdbService = {
@@ -495,7 +547,6 @@ const tmdbService = {
       tvPopularRes,
       tvTopRes,
       tvMazeRes,
-      collectionsPreview,
     ] = await Promise.all([
       tmdbGet("/trending/movie/week", { page: 1 }).catch(() => ({ results: [] })),
       tmdbGet("/movie/now_playing", { region: "IN", page: 1 }).catch(() => ({ results: [] })),
@@ -503,9 +554,32 @@ const tmdbService = {
       tmdbGet("/movie/top_rated", { page: 1 }).catch(() => ({ results: [] })),
       tmdbGet("/tv/popular", { page: 1 }).catch(() => ({ results: [] })),
       tmdbGet("/tv/top_rated", { page: 1 }).catch(() => ({ results: [] })),
-      tmdbService.getTvMazeShows(0),
-      tmdbService.getCollections(),
+      Promise.race([
+        tmdbService.getTvMazeShows(0),
+        new Promise((resolve) => setTimeout(() => resolve([]), 2200)),
+      ]),
     ]);
+
+    // Use cached full collections if warm; otherwise fetch fast 3-collection preview without blocking Home
+    let collectionsPreview = getCachedData("collections:all:v1", LONG_TTL);
+    if (!collectionsPreview) {
+      const fastCols = await Promise.all(
+        COLLECTIONS_CONFIG.slice(0, 3).map(async (cfg) => {
+          const c = await tmdbGet(`/collection/${cfg.collectionIds[0]}`, {}, LONG_TTL).catch(() => null);
+          const parts = (c?.parts || []).map((m) => normalizeTmdbMovie(m, "movie")).filter((m) => m.poster_path);
+          return {
+            slug: cfg.slug,
+            title: cfg.title,
+            category: cfg.category,
+            totalCount: parts.length,
+            previewPosters: parts.slice(0, 3).map((p) => p.poster_path),
+          };
+        })
+      );
+      collectionsPreview = fastCols;
+      // Warm remaining collections in background
+      tmdbService.getCollections().catch(() => {});
+    }
 
     const trendingMovies = dedupeById(
       (trendingMoviesRes.results || []).map((m) => normalizeTmdbMovie(m, "movie"))
@@ -1054,7 +1128,10 @@ const tmdbService = {
         releaseIN?.release_dates?.find((d) => d.certification)?.certification ||
         "UA";
 
-      const omdb = await tmdbService.getOmdbDetails(data.imdb_id);
+      const omdb = await Promise.race([
+        tmdbService.getOmdbDetails(data.imdb_id),
+        new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+      ]);
       const similarRaw =
         data.recommendations?.results?.length > 0
           ? data.recommendations.results
@@ -1101,6 +1178,22 @@ const tmdbService = {
         cast: [],
         similar: FALLBACK_MOVIES,
       };
+    }
+  },
+
+  getTheatres: async (movieId, city = "Bengaluru") => {
+    return buildTheatresForMovie(movieId, city);
+  },
+
+  warmCache: async () => {
+    try {
+      await Promise.all([
+        tmdbService.getHomeFeed(),
+        tmdbService.getCollections(),
+      ]);
+      console.log("[Cache Warm] Home & Collections warmed successfully.");
+    } catch (err) {
+      console.warn("[Cache Warm] Partial warmup:", err.message);
     }
   },
 

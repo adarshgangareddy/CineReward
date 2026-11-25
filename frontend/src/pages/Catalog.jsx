@@ -5,6 +5,7 @@ import { Film } from "lucide-react";
 import MovieCard from "../components/MovieCard";
 import CatalogFilterBar from "../components/CatalogFilterBar";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { getCached, setCached } from "../utils/cache";
 
 const GENRE_TITLES = {
   28: "Action",
@@ -71,36 +72,55 @@ const Catalog = () => {
 
   const [filters, setFilters] = useState(readFiltersFromUrl);
 
+  const fetchCatalog = useCallback(
+    async (activeFilters, targetPage = 1, append = false) => {
+      const cacheKey = `catalog:${JSON.stringify(activeFilters)}:${targetPage}`;
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        const cached = getCached(cacheKey);
+        if (cached) {
+          setItems(cached.items || []);
+          setHasMore(Boolean(cached.hasMore));
+          setPage(targetPage);
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
+      }
+
+      try {
+        const res = await axios.get("/api/movies/catalog", {
+          params: { ...activeFilters, page: targetPage },
+        });
+        const fetched = Array.isArray(res.data?.items) ? res.data.items : [];
+        const nextHasMore = Boolean(res.data?.hasMore);
+        if (!append && targetPage === 1) {
+          setCached(cacheKey, { items: fetched, hasMore: nextHasMore });
+        }
+        setItems((prev) => {
+          if (!append) return fetched;
+          const seen = new Set(prev.map((p) => String(p.id)));
+          return [...prev, ...fetched.filter((f) => !seen.has(String(f.id)))];
+        });
+        setPage(targetPage);
+        setHasMore(nextHasMore);
+      } catch (err) {
+        console.error("Failed to fetch catalog:", err);
+        if (!append && !getCached(cacheKey)) setItems([]);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const next = readFiltersFromUrl();
     setFilters(next);
     fetchCatalog(next, 1, false);
-  }, [readFiltersFromUrl]);
-
-  const fetchCatalog = async (activeFilters, targetPage = 1, append = false) => {
-    if (append) setLoadingMore(true);
-    else setLoading(true);
-
-    try {
-      const res = await axios.get("/api/movies/catalog", {
-        params: { ...activeFilters, page: targetPage },
-      });
-      const fetched = Array.isArray(res.data?.items) ? res.data.items : [];
-      setItems((prev) => {
-        if (!append) return fetched;
-        const seen = new Set(prev.map((p) => String(p.id)));
-        return [...prev, ...fetched.filter((f) => !seen.has(String(f.id)))];
-      });
-      setPage(targetPage);
-      setHasMore(Boolean(res.data?.hasMore));
-    } catch (err) {
-      console.error("Failed to fetch catalog:", err);
-      if (!append) setItems([]);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
+  }, [readFiltersFromUrl, fetchCatalog]);
 
   const applyFilters = () => {
     const params = {};
@@ -135,8 +155,8 @@ const Catalog = () => {
       "Discover your next watch";
 
   return (
-    <div className="min-h-screen pb-20 pt-8">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen pb-24 lg:pb-20 pt-6 sm:pt-8">
+      <div className="max-w-[1400px] mx-auto px-5 sm:px-6 lg:px-8">
         <div className="mb-7">
           <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400 mb-2">
             THE CINEREWARD LIBRARY

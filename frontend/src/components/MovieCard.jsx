@@ -34,6 +34,7 @@ const MovieCard = ({ movie, compact = false }) => {
     <div className="group flex flex-col">
       <Link
         to={`/movie/${movie.id}`}
+        state={{ movie }}
         className="relative aspect-[2/3] rounded-xl overflow-hidden bg-[#14141d] border border-white/[0.08] group-hover:border-white/25 transition-all duration-300 shadow-lg"
       >
         <img
@@ -67,6 +68,7 @@ const MovieCard = ({ movie, compact = false }) => {
           <div className="flex items-center justify-between gap-2">
             <Link
               to={`/movie/${movie.id}`}
+              state={{ movie }}
               className="text-[13px] font-semibold text-white/95 hover:text-[#ff2e3b] transition-colors line-clamp-1"
               title={movie.title}
             >
