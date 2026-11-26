@@ -44,3 +44,4 @@ export function generateCineRewardEmail(title = "movie", existingTeams = []) {
   const rand = Math.floor(100 + Math.random() * 900);
   return `${baseSlug}-${rand}@cinereward.com`;
 }
+
