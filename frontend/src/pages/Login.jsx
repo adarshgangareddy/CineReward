@@ -24,7 +24,7 @@ const OAUTH_ERRORS = {
 
 const getDashboardForRole = (role) => {
   if (role === "movie_team") return "/team/dashboard";
-  if (role === "super_admin") return "/super-admin-dashboard";
+  if (role === "super_admin" || role === "admin") return "/super-admin-dashboard";
   return "/dashboard";
 };
 

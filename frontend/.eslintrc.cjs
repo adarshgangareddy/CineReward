@@ -8,13 +8,6 @@ module.exports = {
     'plugin:react-hooks/recommended',
   ],
   ignorePatterns: ['dist', '.eslintrc.cjs'],
-  overrides: [
-    {
-      files: ['public/firebase-messaging-sw.js'],
-      env: { serviceworker: true, browser: true },
-      globals: { firebase: 'readonly' },
-    },
-  ],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],

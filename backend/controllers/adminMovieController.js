@@ -38,12 +38,15 @@ const adminMovieController = {
       const movies = (moviesRaw || []).map(mapMovie);
       const movieIds = movies.map((m) => m.customId);
 
-      const [{ data: teamsRaw }, { data: ticketRows }] = await Promise.all([
+      const [{ data: teamsRaw }, ticketQuery] = await Promise.all([
         db
           .from("movie_teams")
           .select("id, name, email, secret_key_hint, assigned_movies, free_tickets_count"),
-        db.from("tickets").select("movie_id, price").in("movie_id", movieIds),
+        movieIds.length > 0
+          ? db.from("tickets").select("movie_id, price").in("movie_id", movieIds)
+          : Promise.resolve({ data: [] }),
       ]);
+      const ticketRows = ticketQuery?.data || [];
 
       const bookingMap = {};
       for (const t of ticketRows || []) {

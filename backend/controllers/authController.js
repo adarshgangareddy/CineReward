@@ -15,9 +15,15 @@ const {
   formatKeyHint,
 } = require("../utils/passwordHash");
 
+const normalizeAppRole = (role) => {
+  if (role === "admin" || role === "superadmin") return "super_admin";
+  if (role === "movieteam") return "movie_team";
+  return role || "user";
+};
+
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user._id || user.id, role: user.role },
+    { id: user._id || user.id, role: normalizeAppRole(user.role) },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
@@ -30,7 +36,7 @@ const formatUserResponse = (user) => ({
   email: user.email,
   phone: user.phone,
   coins: user.coins || 0,
-  role: user.role || "user",
+  role: normalizeAppRole(user.role),
   profilePicture: user.profilePicture || "",
 });
 
@@ -349,7 +355,15 @@ const authController = {
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      if (req.auth.role === "super_admin") {
+      if (req.auth.role === "super_admin" || req.auth.role === "admin") {
+        if (req.auth.id && req.auth.id !== "super_admin" && isSupabaseReady()) {
+          const { data } = await getSupabase()
+            .from("users")
+            .select("id, name, username, email, phone, coins, role, profile_picture, booked_tickets")
+            .eq("id", req.auth.id)
+            .single();
+          if (data) return res.json({ user: formatUserResponse(mapUser(data)) });
+        }
         return res.json({
           user: {
             id: "super_admin",

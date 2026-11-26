@@ -11,7 +11,6 @@ import {
   ShieldCheck,
   Sparkles,
   Film,
-  ChevronRight,
   Search,
   RotateCcw,
   Info,
@@ -20,10 +19,6 @@ import {
   Plus,
   Minus,
   ShoppingBag,
-  CreditCard,
-  Smartphone,
-  Wallet,
-  Building2,
   Pencil,
 } from "lucide-react";
 import { getActiveSession } from "../utils/auth";
@@ -90,14 +85,6 @@ const SNACKS_MENU = [
     price: 740,
     badge: "Theatre Special",
   },
-];
-
-const PAYMENT_METHODS = [
-  { id: "upi", label: "Pay by any UPI App", desc: "Google Pay, PhonePe, Paytm & UPI QR", Icon: Smartphone },
-  { id: "card", label: "Debit / Credit Card", desc: "Visa, Mastercard, RuPay & Amex", Icon: CreditCard },
-  { id: "wallets", label: "Mobile Wallets", desc: "Amazon Pay, Mobikwik & CineWallet", Icon: Wallet },
-  { id: "netbanking", label: "Net Banking", desc: "HDFC, ICICI, SBI, Axis & 40+ banks", Icon: Building2 },
-  { id: "coins", label: "Redeem CineCoins", desc: "Use earned coins for instant seat savings", Icon: Coins },
 ];
 
 const CONVENIENCE_FEE_PER_TICKET = 30;
@@ -223,10 +210,9 @@ const SeatSelection = () => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
 
-  // Step 2 -> Terms Modal -> Step 3 Snacks -> Step 4 Payment
+  // Step 2 -> Terms Modal -> Direct Razorpay OR Optional Snacks -> Razorpay
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [snackCart, setSnackCart] = useState({});
-  const [paymentMethod, setPaymentMethod] = useState("upi");
 
   const [userCoins, setUserCoins] = useState(() =>
     Number(sessionUser?.coins || 0)
@@ -420,10 +406,9 @@ const SeatSelection = () => {
     }, 0);
     const fee = selectedSeats.length * CONVENIENCE_FEE_PER_TICKET;
     const maxCoinDiscount = Math.floor(ticketSubtotal * 0.5);
-    const coinsToApply =
-      useCoins || paymentMethod === "coins"
-        ? Math.min(userCoins, maxCoinDiscount)
-        : 0;
+    const coinsToApply = useCoins
+      ? Math.min(userCoins, maxCoinDiscount)
+      : 0;
     const finalTotal = Math.max(
       0,
       ticketSubtotal + snacksSummary.total + fee - coinsToApply
@@ -440,7 +425,6 @@ const SeatSelection = () => {
     selectedTheatre,
     snacksSummary.total,
     useCoins,
-    paymentMethod,
     userCoins,
   ]);
 
@@ -566,9 +550,7 @@ const SeatSelection = () => {
     setBookingLoading(true);
     const userId = sessionUser.id || sessionUser._id;
     const methodLabel =
-      pricingSummary.finalTotal === 0
-        ? "CineCoins"
-        : PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label || "Razorpay";
+      pricingSummary.finalTotal === 0 ? "CineCoins" : "Razorpay";
 
     const bookingPayload = {
       userId,
@@ -623,7 +605,7 @@ const SeatSelection = () => {
               }
               await finalizeTicketBooking({
                 ...bookingPayload,
-                paymentMethod: `Razorpay (${methodLabel})`,
+                paymentMethod: "Razorpay",
               });
             } catch (err) {
               setError(
@@ -666,7 +648,7 @@ const SeatSelection = () => {
           err.response?.data?.error ||
           err.response?.data?.message ||
           err.message ||
-          "Booking failed. Verify backend Razorpay & MongoDB configuration."
+          "Booking failed. Verify backend Razorpay & Supabase configuration."
       );
       setBookingLoading(false);
     }
@@ -1172,13 +1154,11 @@ const SeatSelection = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setStep("payment");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="glass-button px-4 py-2 rounded-xl text-xs font-bold"
+                  disabled={bookingLoading}
+                  onClick={handleConfirmBooking}
+                  className="glass-button px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
                 >
-                  Skip
+                  Skip &amp; Pay ₹{pricingSummary.finalTotal}
                 </button>
               </div>
 
@@ -1240,129 +1220,24 @@ const SeatSelection = () => {
               </div>
             </div>
 
-            <div className="min-w-0 w-full lg:col-span-4 bg-[#0e111b]/85 backdrop-blur-2xl border border-white/[0.12] rounded-3xl p-5 sm:p-6 space-y-4">
-              <div className="flex justify-between items-center text-sm font-bold text-white">
-                <span>Tickets ({selectedSeats.length})</span>
-                <span>₹{pricingSummary.ticketSubtotal}</span>
-              </div>
-              <div className="border-t border-white/10 pt-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                  Your Food Cart
-                </h3>
-                {snacksSummary.items.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center bg-white/[0.03] rounded-2xl border border-white/[0.06]">
-                    Fill your cart with favourite combos or click Skip!
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 text-xs">
-                    {snacksSummary.items.map((it) => (
-                      <div key={it.id} className="flex justify-between text-slate-200">
-                        <span>{it.qty}x {it.name}</span>
-                        <span className="font-bold">₹{it.lineTotal}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("payment");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="w-full btn-crimson py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-              >
-                <span>
-                  Continue (₹{pricingSummary.ticketSubtotal + pricingSummary.snacksTotal})
-                </span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: Order Summary & Payment Options (BookMyShow Style) */}
-        {step === "payment" && selectedTheatre && selectedSlot && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-w-0">
-            <div className="min-w-0 w-full lg:col-span-7 bg-[#0e111b]/85 backdrop-blur-2xl border border-white/[0.1] rounded-3xl p-5 sm:p-7 space-y-5">
-              <h2 className="text-lg font-extrabold text-white">Payment Options</h2>
-              <div className="space-y-2.5">
-                {PAYMENT_METHODS.map(({ id: mId, label, desc, Icon }) => {
-                  const active = paymentMethod === mId;
-                  return (
-                    <button
-                      key={mId}
-                      type="button"
-                      onClick={() => setPaymentMethod(mId)}
-                      className={`w-full text-left p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
-                        active
-                          ? "bg-[#e50914]/15 border-[#e50914] text-white"
-                          : "bg-white/[0.04] border-white/[0.08] text-slate-300 hover:bg-white/[0.08]"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-white/[0.07] flex items-center justify-center shrink-0">
-                          <Icon className="w-5 h-5 text-[#ff2e3b]" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-white">{label}</p>
-                          <p className="text-xs text-slate-400 truncate">{desc}</p>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 shrink-0 text-slate-400" />
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold text-white uppercase tracking-wider">
-                  For Sending M-Ticket &amp; Notifications
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input
-                    type="email"
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
-                    placeholder="Email for M-Ticket"
-                    className="bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
-                  />
-                  <input
-                    type="tel"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
-                    placeholder="Phone (+91...)"
-                    className="bg-white/[0.06] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="min-w-0 w-full lg:col-span-5 bg-[#0e111b]/90 backdrop-blur-2xl border border-white/[0.14] rounded-3xl p-5 sm:p-6 space-y-4">
-              <div className="flex justify-between items-start border-b border-white/10 pb-4">
+            <div className="min-w-0 w-full lg:col-span-4 bg-[#0e111b]/90 backdrop-blur-2xl border border-white/[0.12] rounded-3xl p-5 sm:p-6 space-y-4">
+              <div className="flex justify-between items-start border-b border-white/10 pb-3">
                 <div className="min-w-0">
-                  <h3 className="text-lg font-extrabold text-white break-words">
+                  <h3 className="text-sm font-extrabold text-white break-words">
                     {movie?.title}
                   </h3>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {selectedDayObj.dayLabel}, {selectedDayObj.dateNum} {selectedDayObj.month} | {selectedSlot.time}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {selectedLangFormat.language} ({selectedLangFormat.format}) • {selectedSeats.join(", ")}
-                  </p>
-                  <p className="text-xs text-slate-300 mt-1 font-semibold">
-                    {selectedTheatre.name} ({selectedSlot.screen})
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {selectedTheatre?.name} • {selectedSlot?.time} • {selectedSeats.join(", ")}
                   </p>
                 </div>
-                <span className="text-xs font-bold text-[#ff2e3b] shrink-0">
+                <span className="text-[11px] font-bold text-[#ff2e3b] shrink-0">
                   {selectedSeats.length} M-Ticket
                 </span>
               </div>
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-slate-300">
-                  <span>Ticket(s) price</span>
+                  <span>Tickets ({selectedSeats.length})</span>
                   <span className="font-bold text-white">₹{pricingSummary.ticketSubtotal}.00</span>
                 </div>
                 {pricingSummary.snacksTotal > 0 && (
@@ -1375,38 +1250,75 @@ const SeatSelection = () => {
                   <span>Convenience fees</span>
                   <span>₹{pricingSummary.fee}.00</span>
                 </div>
+              </div>
 
-                {userCoins > 0 && (
-                  <label className="flex items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 cursor-pointer mt-2">
-                    <span className="flex items-center gap-2 text-amber-200 font-semibold">
-                      <Coins className="w-4 h-4 text-amber-400" />
-                      Redeem CineCoins (Bal: {userCoins})
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={useCoins || paymentMethod === "coins"}
-                      onChange={(e) => {
-                        setUseCoins(e.target.checked);
-                        if (!e.target.checked && paymentMethod === "coins") {
-                          setPaymentMethod("upi");
-                        }
-                      }}
-                      className="accent-[#e50914] w-4 h-4"
-                    />
-                  </label>
-                )}
-
-                {pricingSummary.coinsToApply > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-semibold">
-                    <span>CineCoins Discount</span>
-                    <span>-₹{pricingSummary.coinsToApply}.00</span>
+              <div className="border-t border-white/10 pt-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                  Your Food Cart
+                </h3>
+                {snacksSummary.items.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-4 text-center bg-white/[0.03] rounded-2xl border border-white/[0.06]">
+                    Fill your cart with favourite combos or pay directly!
+                  </p>
+                ) : (
+                  <div className="space-y-2 text-xs">
+                    {snacksSummary.items.map((it) => (
+                      <div key={it.id} className="flex justify-between text-slate-200">
+                        <span>{it.qty}x {it.name}</span>
+                        <span className="font-bold">₹{it.lineTotal}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
 
-                <div className="flex justify-between items-center text-base font-extrabold text-white pt-3 border-t border-white/10">
-                  <span>Amount Payable</span>
-                  <span>₹{pricingSummary.finalTotal}.00</span>
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 space-y-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  M-Ticket &amp; Notification Details
+                </p>
+                <div className="grid grid-cols-1 gap-2">
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="Email for M-Ticket"
+                    className="bg-white/[0.06] border border-white/[0.12] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#e50914]"
+                  />
+                  <input
+                    type="tel"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="Phone (+91...)"
+                    className="bg-white/[0.06] border border-white/[0.12] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#e50914]"
+                  />
                 </div>
+              </div>
+
+              {userCoins > 0 && (
+                <label className="flex items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 cursor-pointer text-xs">
+                  <span className="flex items-center gap-2 text-amber-200 font-semibold">
+                    <Coins className="w-4 h-4 text-amber-400" />
+                    Redeem CineCoins (Bal: {userCoins})
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={useCoins}
+                    onChange={(e) => setUseCoins(e.target.checked)}
+                    className="accent-[#e50914] w-4 h-4"
+                  />
+                </label>
+              )}
+
+              {pricingSummary.coinsToApply > 0 && (
+                <div className="flex justify-between text-xs text-emerald-400 font-semibold">
+                  <span>CineCoins Discount</span>
+                  <span>-₹{pricingSummary.coinsToApply}.00</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-base font-extrabold text-white pt-3 border-t border-white/10">
+                <span>Amount Payable</span>
+                <span>₹{pricingSummary.finalTotal}.00</span>
               </div>
 
               <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-400/25 rounded-xl px-3 py-2">
@@ -1585,14 +1497,7 @@ const SeatSelection = () => {
                 Tickets once confirmed follow the selected theatre&apos;s cancellation policy ({selectedTheatre?.cancellable ? "Cancellation Available" : "Non-cancellable"}).
               </p>
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowTermsModal(false)}
-                className="flex-1 glass-button py-3 rounded-xl text-xs font-bold"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col sm:flex-row gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1600,9 +1505,21 @@ const SeatSelection = () => {
                   setStep("snacks");
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className="flex-1 btn-crimson py-3 rounded-xl text-xs font-bold"
+                className="glass-button px-4 py-3 rounded-xl text-xs font-bold"
               >
-                Accept
+                + Add Snacks
+              </button>
+              <button
+                type="button"
+                disabled={bookingLoading}
+                onClick={() => {
+                  setShowTermsModal(false);
+                  handleConfirmBooking();
+                }}
+                className="flex-1 btn-crimson py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Accept &amp; Pay ₹{pricingSummary.finalTotal}</span>
               </button>
             </div>
           </div>

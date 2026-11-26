@@ -25,6 +25,7 @@ import SearchBar from "./SearchBar";
 import BrandLogo from "./BrandLogo";
 import { clearAllSessions, safeParseJSON } from "../utils/auth";
 import { getWatchlist } from "../utils/watchlist";
+import { supabase } from "../lib/supabase";
 
 const GENRES = [
   { label: "Action", to: "/catalog?genre=28" },
@@ -120,9 +121,7 @@ const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(
-    () => !localStorage.getItem("selectedCityConfirmed")
-  );
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [citySearchQuery, setCitySearchQuery] = useState("");
   const [detectingCity, setDetectingCity] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
@@ -175,6 +174,27 @@ const Navbar = () => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (localStorage.getItem("selectedCityConfirmed")) return undefined;
+    let timerId;
+    const scheduleLocationPrompt = () => {
+      timerId = setTimeout(() => {
+        if (!localStorage.getItem("selectedCityConfirmed")) {
+          setIsLocationModalOpen(true);
+        }
+      }, 5000);
+    };
+    if (document.readyState === "complete") {
+      scheduleLocationPrompt();
+    } else {
+      window.addEventListener("load", scheduleLocationPrompt, { once: true });
+    }
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener("load", scheduleLocationPrompt);
+    };
   }, []);
 
   useEffect(() => {
@@ -239,6 +259,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     clearAllSessions();
+    supabase?.auth.signOut().catch(() => {});
     setUser(null);
     setTeam(null);
     setSuperAdmin(null);
