@@ -520,6 +520,11 @@ const Navbar = () => {
             ) : (
               <Link
                 to="/login"
+                state={
+                  location.pathname !== "/login" && location.pathname !== "/signup"
+                    ? { from: location }
+                    : undefined
+                }
                 className="hidden sm:flex btn-crimson px-5 py-2 rounded-full text-xs font-bold items-center gap-1.5"
               >
                 <User className="w-3.5 h-3.5" />
@@ -651,7 +656,16 @@ const Navbar = () => {
                   Admin Hub
                 </Link>
               ) : (
-                <Link to="/login" onClick={() => setIsMobileOpen(false)} className="text-[#ff2e3b] font-bold">
+                <Link
+                  to="/login"
+                  state={
+                    location.pathname !== "/login" && location.pathname !== "/signup"
+                      ? { from: location }
+                      : undefined
+                  }
+                  onClick={() => setIsMobileOpen(false)}
+                  className="text-[#ff2e3b] font-bold"
+                >
                   Sign In
                 </Link>
               )}

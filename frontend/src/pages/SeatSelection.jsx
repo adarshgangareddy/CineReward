@@ -164,11 +164,35 @@ const ensureRazorpayLoaded = () =>
     document.body.appendChild(script);
   });
 
+const readPendingBooking = (movieId) => {
+  try {
+    const raw = sessionStorage.getItem(`cinereward_pending_booking_${movieId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - Number(parsed.savedAt || 0) > 30 * 60 * 1000) {
+      sessionStorage.removeItem(`cinereward_pending_booking_${movieId}`);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingBooking = (movieId) => {
+  try {
+    sessionStorage.removeItem(`cinereward_pending_booking_${movieId}`);
+  } catch {
+    // ignore storage errors
+  }
+};
+
 const SeatSelection = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const upcomingDays = useMemo(() => buildUpcomingDays(), []);
+  const pendingDraft = useMemo(() => readPendingBooking(id), [id]);
   const session = getActiveSession();
   const sessionUser = session?.data || session?.user;
 
@@ -176,25 +200,30 @@ const SeatSelection = () => {
     () => location.state?.movie || getCached(`movie:${id}`) || null
   );
   const [selectedCity, setSelectedCity] = useState(
-    () => localStorage.getItem("selectedCity") || "Bengaluru"
+    () => pendingDraft?.selectedCity || localStorage.getItem("selectedCity") || "Bengaluru"
   );
   const [theatres, setTheatres] = useState(
     () =>
       getCached(
-        `theatres:${id}:${localStorage.getItem("selectedCity") || "Bengaluru"}`
+        `theatres:${id}:${pendingDraft?.selectedCity || localStorage.getItem("selectedCity") || "Bengaluru"}`
       ) || []
   );
   const [loadingTheatres, setLoadingTheatres] = useState(false);
 
   // BookMyShow Flow States
-  const [step, setStep] = useState("theatres"); // "theatres" | "seats" | "snacks" | "confirmed"
-  const [showFormatModal, setShowFormatModal] = useState(true);
-  const [selectedLangFormat, setSelectedLangFormat] = useState({
-    language: "English",
-    format: "All Formats",
-  });
+  const [step, setStep] = useState(() => pendingDraft?.step || "theatres"); // "theatres" | "seats" | "snacks" | "confirmed"
+  const [showFormatModal, setShowFormatModal] = useState(() => !pendingDraft);
+  const [selectedLangFormat, setSelectedLangFormat] = useState(
+    () =>
+      pendingDraft?.selectedLangFormat || {
+        language: "English",
+        format: "All Formats",
+      }
+  );
 
-  const [selectedDate, setSelectedDate] = useState(upcomingDays[0].iso);
+  const [selectedDate, setSelectedDate] = useState(
+    () => pendingDraft?.selectedDate || upcomingDays[0].iso
+  );
   const [priceRange, setPriceRange] = useState("all");
   const [preferredTime, setPreferredTime] = useState("all");
   const [sortBy, setSortBy] = useState("featured");
@@ -204,22 +233,32 @@ const SeatSelection = () => {
   // Step 1 -> "How many seats?" Modal -> Step 2 Seat Grid
   const [pendingShow, setPendingShow] = useState(null);
   const [showQtyModal, setShowQtyModal] = useState(false);
-  const [seatQuantity, setSeatQuantity] = useState(2);
+  const [seatQuantity, setSeatQuantity] = useState(() => pendingDraft?.seatQuantity || 2);
 
-  const [selectedTheatre, setSelectedTheatre] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [selectedTheatre, setSelectedTheatre] = useState(
+    () => pendingDraft?.selectedTheatre || null
+  );
+  const [selectedSlot, setSelectedSlot] = useState(
+    () => pendingDraft?.selectedSlot || null
+  );
+  const [selectedSeats, setSelectedSeats] = useState(
+    () => pendingDraft?.selectedSeats || []
+  );
 
   // Step 2 -> Terms Modal -> Direct Razorpay OR Optional Snacks -> Razorpay
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [snackCart, setSnackCart] = useState({});
+  const [snackCart, setSnackCart] = useState(() => pendingDraft?.snackCart || {});
 
   const [userCoins, setUserCoins] = useState(() =>
     Number(sessionUser?.coins || 0)
   );
-  const [useCoins, setUseCoins] = useState(false);
-  const [contactEmail, setContactEmail] = useState(sessionUser?.email || "");
-  const [contactPhone, setContactPhone] = useState(sessionUser?.phone || "");
+  const [useCoins, setUseCoins] = useState(() => Boolean(pendingDraft?.useCoins));
+  const [contactEmail, setContactEmail] = useState(
+    () => pendingDraft?.contactEmail || sessionUser?.email || ""
+  );
+  const [contactPhone, setContactPhone] = useState(
+    () => pendingDraft?.contactPhone || sessionUser?.phone || ""
+  );
 
   const [bookingLoading, setBookingLoading] = useState(false);
   const [error, setError] = useState("");
@@ -526,6 +565,7 @@ const SeatSelection = () => {
       coinsUsed: pricingSummary.coinsToApply,
       coinsEarned,
     });
+    clearPendingBooking(id);
     setStep("confirmed");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -538,10 +578,33 @@ const SeatSelection = () => {
     }
 
     if (!session?.token || !sessionUser) {
+      try {
+        sessionStorage.setItem(
+          `cinereward_pending_booking_${id}`,
+          JSON.stringify({
+            selectedCity,
+            selectedLangFormat,
+            selectedDate,
+            selectedTheatre,
+            selectedSlot,
+            seatQuantity,
+            selectedSeats,
+            snackCart,
+            useCoins,
+            contactEmail,
+            contactPhone,
+            step: step === "snacks" ? "snacks" : "seats",
+            savedAt: Date.now(),
+          })
+        );
+        sessionStorage.setItem("cinereward_post_login_redirect", `/book/${id}`);
+      } catch {
+        // ignore storage errors
+      }
       navigate("/login", {
         state: {
           from: { pathname: `/book/${id}` },
-          message: "Sign in to confirm your tickets and earn CineReward coins.",
+          message: "Sign in to confirm your selected seats and complete payment.",
         },
       });
       return;
@@ -683,6 +746,13 @@ const SeatSelection = () => {
   return (
     <div className="min-h-[calc(100vh-5rem)] pt-5 pb-32 lg:pt-8 lg:pb-16 px-3.5 sm:px-5">
       <div className="max-w-7xl mx-auto space-y-5 min-w-0">
+        {pendingDraft && session?.token && selectedSeats.length > 0 && (
+          <div className="bg-emerald-500/15 border border-emerald-400/35 text-emerald-200 px-4 py-3 rounded-2xl text-xs font-medium flex items-center justify-between gap-3">
+            <span>
+              Signed in! Your selected seats (<strong>{selectedSeats.join(", ")}</strong>) are ready — click Pay to complete payment via Razorpay.
+            </span>
+          </div>
+        )}
         {/* Top Movie & Progress Header */}
         <div className="bg-[#0e111b]/75 backdrop-blur-2xl border border-white/[0.1] rounded-3xl p-4 sm:p-6 shadow-2xl min-w-0">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 min-w-0">

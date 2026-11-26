@@ -22,10 +22,31 @@ const OAUTH_ERRORS = {
   true: "Authentication could not be completed. Please try again.",
 };
 
+const POST_LOGIN_REDIRECT_KEY = "cinereward_post_login_redirect";
+
 const getDashboardForRole = (role) => {
   if (role === "movie_team") return "/team/dashboard";
   if (role === "super_admin" || role === "admin") return "/super-admin-dashboard";
   return "/dashboard";
+};
+
+const consumePostLoginRedirect = (role) => {
+  try {
+    const saved = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (saved) sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    if (
+      role === "user" &&
+      saved &&
+      saved.startsWith("/") &&
+      !saved.startsWith("/login") &&
+      !saved.startsWith("/signup")
+    ) {
+      return saved;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return getDashboardForRole(role);
 };
 
 const Login = () => {
@@ -38,9 +59,26 @@ const Login = () => {
   const [phoneName, setPhoneName] = useState("");
 
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState(() => location.state?.message || "");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Persist return path across external OAuth redirects (Google / X / GitHub)
+  useEffect(() => {
+    const fromState = location.state?.from;
+    if (fromState?.pathname && !fromState.pathname.startsWith("/login") && !fromState.pathname.startsWith("/signup")) {
+      const target = `${fromState.pathname}${fromState.search || ""}`;
+      try {
+        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, target);
+      } catch {
+        // ignore storage errors
+      }
+    }
+    if (location.state?.message) {
+      setInfoMessage(location.state.message);
+    }
+  }, [location.state]);
 
   // Handle Supabase OAuth redirect with #access_token fragment
   useEffect(() => {
@@ -91,8 +129,9 @@ const Login = () => {
     if (token && rawUser) {
       const parsedUser = safeParseJSON(rawUser);
       if (parsedUser) {
-        saveRoleSession(parsedUser.role || "user", parsedUser, token);
-        navigate(getDashboardForRole(parsedUser.role), { replace: true });
+        const userRole = parsedUser.role || "user";
+        saveRoleSession(userRole, parsedUser, token);
+        navigate(consumePostLoginRedirect(userRole), { replace: true });
         return;
       }
       setError("Failed to parse Google login response.");
@@ -101,16 +140,30 @@ const Login = () => {
 
     const session = getActiveSession();
     if (session) {
-      const fromPath = location.state?.from?.pathname;
-      navigate(fromPath || getDashboardForRole(session.role), { replace: true });
+      const fromPath = location.state?.from?.pathname
+        ? `${location.state.from.pathname}${location.state.from.search || ""}`
+        : null;
+      navigate(fromPath || consumePostLoginRedirect(session.role), { replace: true });
     }
   }, [location, navigate]);
 
   const finishAuthSuccess = (user, token) => {
-    saveRoleSession(user.role || "user", user, token);
+    const role = user.role || "user";
+    saveRoleSession(role, user, token);
     const fromPath =
-      user.role === "user" ? location.state?.from?.pathname : null;
-    navigate(fromPath || getDashboardForRole(user.role), { replace: true });
+      role === "user" && location.state?.from?.pathname
+        ? `${location.state.from.pathname}${location.state.from.search || ""}`
+        : null;
+    if (fromPath) {
+      try {
+        sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+      } catch {
+        // ignore
+      }
+      navigate(fromPath, { replace: true });
+      return;
+    }
+    navigate(consumePostLoginRedirect(role), { replace: true });
   };
 
   const handleUnifiedLogin = async (e) => {
@@ -140,28 +193,69 @@ const Login = () => {
 
   const handleGoogleLogin = () => {
     setError("");
-    if (supabase) {
-      supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.origin + "/login" },
-      });
+    const authOrigin = encodeURIComponent(window.location.origin);
+    const isVercelHost = window.location.hostname.endsWith(".vercel.app");
+    // Proxy through Vercel (/api/auth/google) in production so Supabase project URL is never shown
+    if (isVercelHost) {
+      window.location.href = `/api/auth/google?origin=${authOrigin}`;
       return;
     }
-    // Fallback: Passport Google OAuth redirect
     const apiBaseURL = getApiBaseURL();
-    window.location.href = `${apiBaseURL}/api/auth/google?origin=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = `${apiBaseURL}/api/auth/google?origin=${authOrigin}`;
   };
 
-  const handleSocialOAuth = async (provider) => {
+  const handleSocialOAuth = async (requestedProvider) => {
     setError("");
-    if (supabase) {
-      await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: window.location.origin + "/login" },
-      });
+    if (!supabase) {
+      setError(
+        `${requestedProvider === "twitter" ? "X" : requestedProvider.toUpperCase()} sign-in is not configured yet. Please use Google or Email sign-in.`
+      );
       return;
     }
-    setError(`${provider.toUpperCase()} sign-in requires Supabase to be configured (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY).`);
+
+    const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+    const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+    let resolvedProvider = requestedProvider;
+
+    try {
+      const settingsRes = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+        headers: { apikey: supabaseAnon },
+      });
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        const ext = settings?.external || {};
+        if (requestedProvider === "twitter") {
+          if (ext.x) resolvedProvider = "x";
+          else if (ext.twitter) resolvedProvider = "twitter";
+          else {
+            setError(
+              "X (Twitter) sign-in is not enabled in Supabase Auth Providers yet. Use Google or Email sign-in, or enable X / Twitter in Supabase → Authentication → Sign In / Providers."
+            );
+            return;
+          }
+        } else if (!ext[requestedProvider]) {
+          setError(
+            `${requestedProvider.charAt(0).toUpperCase() + requestedProvider.slice(1)} sign-in is not enabled in Supabase Auth Providers yet. Enable it in Supabase → Authentication → Sign In / Providers.`
+          );
+          return;
+        }
+      }
+
+      const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider: resolvedProvider,
+        options: {
+          redirectTo: window.location.origin + "/login",
+          skipBrowserRedirect: true,
+        },
+      });
+      if (oauthErr || !data?.url) {
+        setError(oauthErr?.message || "Could not start social sign-in.");
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err.message || "Could not start social sign-in.");
+    }
   };
 
   const handlePhoneContinue = async (e) => {
@@ -210,6 +304,12 @@ const Login = () => {
             <span className="text-slate-200 font-semibold">Admins</span>
           </p>
         </div>
+
+        {infoMessage && !error && (
+          <div className="bg-amber-500/15 border border-amber-400/40 text-amber-200 px-4 py-3 rounded-xl mb-5 text-xs font-medium leading-relaxed break-words">
+            {infoMessage}
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/15 border border-red-500/40 text-red-200 px-4 py-3 rounded-xl mb-5 text-xs font-medium leading-relaxed break-words">
