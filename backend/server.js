@@ -1,12 +1,13 @@
 require("dotenv").config();
 
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require("express-session");
 const passport = require("passport");
 
 require("./middlewares/passport");
+
+const { verifySupabaseConnection, isSupabaseReady, getLastDbError } = require("./config/supabase");
 
 const app = express();
 
@@ -27,22 +28,18 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
-
+      if (!origin) return callback(null, true);
       if (
         allowedOrigins.includes(origin) ||
         /^https:\/\/[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.vercel\.app$/.test(origin)
       ) {
         return callback(null, true);
       }
-
       console.error(`CORS blocked origin: ${origin}`);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-  }),
+  })
 );
 
 // --------------------------------------------------
@@ -53,14 +50,14 @@ app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 
 // --------------------------------------------------
-// SESSION
+// SESSION (for Passport Google OAuth redirect flow)
 // --------------------------------------------------
 
 const isHttpsFrontend = (process.env.FRONTEND_URL || "").startsWith("https://");
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || process.env.JWT_SECRET || "cinereward-session",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -68,7 +65,7 @@ app.use(
       httpOnly: true,
       sameSite: "lax",
     },
-  }),
+  })
 );
 
 // --------------------------------------------------
@@ -88,7 +85,8 @@ app.get("/", (req, res) => {
     message: "CineReward API is running",
     environment: process.env.NODE_ENV || "development",
     uptimeSeconds: Math.round(process.uptime()),
-    databaseConnected: mongoose.connection.readyState === 1,
+    database: "Supabase Postgres",
+    databaseConnected: isSupabaseReady(),
   });
 });
 
@@ -96,7 +94,9 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     uptimeSeconds: Math.round(process.uptime()),
-    databaseConnected: mongoose.connection.readyState === 1,
+    database: "Supabase Postgres",
+    databaseConnected: isSupabaseReady(),
+    dbError: isSupabaseReady() ? undefined : getLastDbError(),
     timestamp: new Date().toISOString(),
   });
 });
@@ -130,10 +130,7 @@ app.use("/api/users", userRoutes);
 // --------------------------------------------------
 
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
+  res.status(404).json({ success: false, message: "Route not found" });
 });
 
 // --------------------------------------------------
@@ -142,20 +139,12 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("Server error:", err);
-
   if (err.message === "Not allowed by CORS") {
-    return res.status(403).json({
-      success: false,
-      message: "CORS policy blocked this request",
-    });
+    return res.status(403).json({ success: false, message: "CORS policy blocked this request" });
   }
-
   res.status(err.status || 500).json({
     success: false,
-    message:
-      process.env.NODE_ENV === "production"
-        ? "Internal server error"
-        : err.message,
+    message: process.env.NODE_ENV === "production" ? "Internal server error" : err.message,
   });
 });
 
@@ -165,47 +154,32 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-async function connectMongoWithRetry() {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 8000,
-    });
-    console.log("Connected to MongoDB Atlas");
-  } catch (err) {
-    console.error("MongoDB connection error:", err.message);
-    console.warn("API running in degraded DB mode — movie discovery works; auth/DB routes will return 503 until MongoDB reconnects.");
-  }
-}
-
 async function startServer() {
   try {
-    // Check required environment variables
-    if (!process.env.MONGODB_URI) {
-      throw new Error("MONGODB_URI is not configured");
-    }
+    if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is not configured");
 
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is not configured");
-    }
-
-    if (!process.env.SESSION_SECRET) {
-      throw new Error("SESSION_SECRET is not configured");
-    }
-
-    // Start Express server first so health/movie routes & DB outage responses stay available
+    // Start Express first so health/movie routes stay available immediately
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`[v1.0.2] CineReward API is running on port ${PORT}`);
+      console.log(`[v2.0.0] CineReward API is running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`Allowed origins: ${allowedOrigins.join(", ")}`);
       const tmdbService = require("./services/tmdbService");
       setTimeout(() => tmdbService.warmCache(), 250);
     });
 
-    await connectMongoWithRetry();
-
-    if (mongoose.connection.readyState === 1) {
+    // Attempt Supabase connection (non-blocking)
+    const result = await verifySupabaseConnection();
+    if (result.connected) {
+      console.log("[Supabase] Connected to Supabase Postgres successfully.");
       require("./cron/reviewReminders");
       console.log("Review reminder cron initialized");
+    } else if (!result.configured) {
+      console.warn("[Supabase] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — running in movie-discovery-only mode.");
+      console.warn("[Supabase] Auth and DB routes will return 503 until Supabase env vars are configured.");
+    } else if (result.schemaMissing) {
+      console.error("[Supabase] Connected but tables are missing. Run backend/supabase/schema.sql in Supabase SQL Editor.");
+    } else {
+      console.error("[Supabase] Connection failed:", result.error);
     }
   } catch (error) {
     console.error("Failed to start CineReward API:", error);

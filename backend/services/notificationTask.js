@@ -1,48 +1,35 @@
-const Ticket = require("../models/Ticket");
-const User = require("../models/User");
+const { getSupabase, isSupabaseReady } = require("../config/supabase");
+const { mapUser } = require("../utils/dbMappers");
 const emailService = require("../services/emailService");
-const { sendPushNotification } = require("../config/notifications");
 
 const reviewReminderTask = async () => {
+  if (!isSupabaseReady()) return 0;
   try {
-    const tickets = await Ticket.find({
-      reviewSubmitted: false,
-      createdAt: { $lt: new Date(Date.now() - 3600) }, // Reduced for test
-    }).populate("userId");
+    const db = getSupabase();
+    const cutoff = new Date(Date.now() - 3600 * 1000).toISOString();
+
+    const { data: tickets } = await db
+      .from("tickets")
+      .select("*, users(id, name, email)")
+      .eq("review_submitted", false)
+      .lt("created_at", cutoff);
+
+    if (!tickets || tickets.length === 0) return 0;
+
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
 
     for (const ticket of tickets) {
-      if (ticket.userId && ticket.userId.email) {
-        console.log(`Sending reminder to ${ticket.userId.email}`);
-
-        // 1. Email
+      const user = ticket.users;
+      if (user && user.email) {
+        console.log(`Sending reminder to ${user.email}`);
         try {
-          const frontendUrl = (
-            process.env.FRONTEND_URL || "http://localhost:3000"
-          ).replace(/\/$/, "");
           await emailService.sendReviewReminder(
-            ticket.userId.email,
-            ticket.movieTitle || "your recent movie",
-            `${frontendUrl}/review/${ticket._id}`,
+            user.email,
+            ticket.movie_title || "your recent movie",
+            `${frontendUrl}/review/${ticket.id}`
           );
         } catch (e) {
-          console.error("Email failed");
-        }
-
-        // 2. Push Notification
-        if (ticket.userId.fcmTokens && ticket.userId.fcmTokens.length > 0) {
-          const title = "Rate Your Movie! 🍿";
-          const body = `How was ${ticket.movieTitle || "the movie"}? ⭐ Share your review now and earn rewards!`;
-          const data = {
-            ticketId: ticket._id.toString(),
-            type: "review_reminder",
-          };
-
-          sendPushNotification(
-            ticket.userId.fcmTokens,
-            title,
-            body,
-            data,
-          ).catch((e) => console.error("[Push Error]", e));
+          console.error("Email failed", e.message);
         }
       }
     }

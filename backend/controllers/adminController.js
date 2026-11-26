@@ -1,13 +1,13 @@
-const User = require("../models/User");
-const MovieTeam = require("../models/MovieTeam");
-const Ticket = require("../models/Ticket");
-const Review = require("../models/Review");
+const { getSupabase, isSupabaseReady } = require("../config/supabase");
+const { mapUser, mapMovieTeam, mapTicket, mapReview, toMovieTeamRow } = require("../utils/dbMappers");
 const jwt = require("jsonwebtoken");
 const {
   hashSecret,
   digestSecret,
   formatKeyHint,
 } = require("../utils/passwordHash");
+
+const sb = () => getSupabase();
 
 const adminController = {
   superLogin: async (req, res) => {
@@ -22,20 +22,15 @@ const adminController = {
       const adminSecret = process.env.SUPER_ADMIN_SECRET_CODE?.trim();
 
       if (!adminUsername || !adminPassword) {
-        return res.status(500).json({
-          message: "Super admin login is not configured on the server",
-        });
+        return res.status(500).json({ message: "Super admin login is not configured on the server" });
       }
 
       const matchesIdentity =
-        cleanUsername === adminUsername ||
-        (adminEmail && cleanUsername === adminEmail);
+        cleanUsername === adminUsername || (adminEmail && cleanUsername === adminEmail);
 
       if (matchesIdentity && cleanPassword === adminPassword) {
         if (secretKey && adminSecret && secretKey.trim() !== adminSecret) {
-          return res.status(401).json({
-            message: "Admin secret code is incorrect",
-          });
+          return res.status(401).json({ message: "Admin secret code is incorrect" });
         }
         const token = jwt.sign(
           { role: "super_admin", username: adminUsername },
@@ -60,73 +55,72 @@ const adminController = {
 
   getStats: async (req, res) => {
     try {
-      const userCount = await User.countDocuments();
-      const teamCount = await MovieTeam.countDocuments();
-      const ticketCount = await Ticket.countDocuments();
-      const reviewCount = await Review.countDocuments();
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
+      const db = sb();
 
-      const revenue = await Ticket.aggregate([
-        {
-          $group: {
-            _id: null,
-            total: { $sum: { $multiply: ["$price", 0.02] } },
-          },
-        },
-      ]);
+      const [{ count: userCount }, { count: teamCount }, { count: ticketCount }, { count: reviewCount }, { data: revenueRows }] =
+        await Promise.all([
+          db.from("users").select("*", { count: "exact", head: true }),
+          db.from("movie_teams").select("*", { count: "exact", head: true }),
+          db.from("tickets").select("*", { count: "exact", head: true }),
+          db.from("reviews").select("*", { count: "exact", head: true }),
+          db.from("tickets").select("price"),
+        ]);
+
+      const revenue = (revenueRows || []).reduce(
+        (acc, r) => acc + Number(r.price || 0) * 0.02,
+        0
+      );
 
       res.json({
-        users: userCount,
-        teams: teamCount,
-        tickets: ticketCount,
-        reviews: reviewCount,
-        revenue: revenue[0]?.total || 0,
+        users: userCount || 0,
+        teams: teamCount || 0,
+        tickets: ticketCount || 0,
+        reviews: reviewCount || 0,
+        revenue,
       });
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error fetching stats", error: err.message });
+      res.status(500).json({ message: "Error fetching stats", error: err.message });
     }
   },
 
   getUsers: async (req, res) => {
     try {
-      const users = await User.find().select("-password -resetCodeHash");
-      res.json(users);
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
+      const { data } = await sb()
+        .from("users")
+        .select("id, name, username, email, phone, coins, role, profile_picture, created_at")
+        .order("created_at", { ascending: false });
+      res.json((data || []).map(mapUser));
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error fetching users", error: err.message });
+      res.status(500).json({ message: "Error fetching users", error: err.message });
     }
   },
 
   createMovieTeam: async (req, res) => {
     try {
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
       const { name, email, password, secretKey, assignedMovies } = req.body;
       const normalizedEmail = email?.trim().toLowerCase();
       const cleanKey = secretKey?.trim();
       const cleanPass = password?.trim();
 
       if (!name?.trim() || !normalizedEmail || (!cleanKey && !cleanPass)) {
-        return res.status(400).json({
-          message: "Name, email, and a Secret Key (or password) are required",
-        });
+        return res.status(400).json({ message: "Name, email, and a Secret Key (or password) are required" });
       }
 
       const keyDigest = cleanKey ? digestSecret(cleanKey) : undefined;
+      const db = sb();
 
-      const existing = await MovieTeam.findOne({
-        $or: [
-          { email: normalizedEmail },
-          ...(keyDigest ? [{ secretKeyDigest: keyDigest }] : []),
-        ],
-      });
-      if (existing) {
-        return res
-          .status(409)
-          .json({ message: "Team email or secret key already exists" });
+      // Check duplicate
+      const orFilters = [`email.eq.${normalizedEmail}`];
+      if (keyDigest) orFilters.push(`secret_key_digest.eq.${keyDigest}`);
+      const { data: existing } = await db.from("movie_teams").select("id").or(orFilters.join(",")).limit(1);
+      if (existing && existing.length > 0) {
+        return res.status(409).json({ message: "Team email or secret key already exists" });
       }
 
-      const team = new MovieTeam({
+      const row = toMovieTeamRow({
         name: name.trim(),
         email: normalizedEmail,
         ...(cleanPass ? { password: await hashSecret(cleanPass) } : {}),
@@ -140,32 +134,32 @@ const adminController = {
         assignedMovies: Array.isArray(assignedMovies) ? assignedMovies : [],
       });
 
-      await team.save();
+      const { data: created, error } = await db.from("movie_teams").insert(row).select("*").single();
+      if (error) throw error;
+
+      const team = mapMovieTeam(created);
+      const safeTeam = { ...team };
+      delete safeTeam.password;
+      delete safeTeam.secretKeyHash;
+      delete safeTeam.secretKeyDigest;
+
       res.status(201).json({
         message: "Movie Team created successfully (credentials hashed with Argon2d)",
-        team: team.toObject({
-          transform: (_, value) => {
-            delete value.password;
-            delete value.secretKeyHash;
-            delete value.secretKeyDigest;
-            return value;
-          },
-        }),
+        team: safeTeam,
       });
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error creating team", error: err.message });
+      res.status(500).json({ message: "Error creating team", error: err.message });
     }
   },
 
   updateMovieTeam: async (req, res) => {
     try {
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
       const { name, email, password, secretKey, assignedMovies } = req.body;
-      const team = await MovieTeam.findById(req.params.id);
-      if (!team) {
-        return res.status(404).json({ message: "Movie team not found" });
-      }
+      const db = sb();
+
+      const { data: found } = await db.from("movie_teams").select("*").eq("id", req.params.id).single();
+      if (!found) return res.status(404).json({ message: "Movie team not found" });
 
       const normalizedEmail = email?.trim().toLowerCase();
       const cleanKey = secretKey?.trim();
@@ -174,62 +168,57 @@ const adminController = {
       }
 
       const keyDigest = cleanKey ? digestSecret(cleanKey) : undefined;
-      const duplicate = await MovieTeam.findOne({
-        _id: { $ne: team._id },
-        $or: [
-          { email: normalizedEmail },
-          ...(keyDigest ? [{ secretKeyDigest: keyDigest }] : []),
-        ],
-      });
-      if (duplicate) {
-        return res
-          .status(409)
-          .json({ message: "Team email or secret key already exists" });
+      const orFilters = [`email.eq.${normalizedEmail}`];
+      if (keyDigest) orFilters.push(`secret_key_digest.eq.${keyDigest}`);
+      const { data: dup } = await db
+        .from("movie_teams")
+        .select("id")
+        .or(orFilters.join(","))
+        .neq("id", req.params.id)
+        .limit(1);
+
+      if (dup && dup.length > 0) {
+        return res.status(409).json({ message: "Team email or secret key already exists" });
       }
 
-      team.name = name.trim();
-      team.email = normalizedEmail;
-      team.assignedMovies = Array.isArray(assignedMovies) ? assignedMovies : [];
-
+      const updates = {
+        name: name.trim(),
+        email: normalizedEmail,
+        assigned_movies: Array.isArray(assignedMovies) ? assignedMovies : [],
+      };
       if (cleanKey) {
-        team.secretKeyDigest = keyDigest;
-        team.secretKeyHash = await hashSecret(cleanKey);
-        team.secretKeyHint = formatKeyHint(cleanKey);
-        team.secretKey = undefined;
+        updates.secret_key_digest = keyDigest;
+        updates.secret_key_hash = await hashSecret(cleanKey);
+        updates.secret_key_hint = formatKeyHint(cleanKey);
+        updates.secret_key = null;
       }
       if (password?.trim()) {
-        team.password = await hashSecret(password.trim());
+        updates.password = await hashSecret(password.trim());
       }
 
-      await team.save();
-      res.json({
-        message: "Movie team updated successfully",
-        team: team.toObject({
-          transform: (_, value) => {
-            delete value.password;
-            delete value.secretKeyHash;
-            delete value.secretKeyDigest;
-            return value;
-          },
-        }),
-      });
+      const { data: updated } = await db.from("movie_teams").update(updates).eq("id", req.params.id).select("*").single();
+      const team = mapMovieTeam(updated);
+      const safeTeam = { ...team };
+      delete safeTeam.password;
+      delete safeTeam.secretKeyHash;
+      delete safeTeam.secretKeyDigest;
+
+      res.json({ message: "Movie team updated successfully", team: safeTeam });
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error updating team", error: err.message });
+      res.status(500).json({ message: "Error updating team", error: err.message });
     }
   },
 
   getAllTeams: async (req, res) => {
     try {
-      const teams = await MovieTeam.find().select(
-        "-password -secretKeyHash -secretKeyDigest -secretKey -resetCodeHash"
-      );
-      res.json(teams);
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
+      const { data } = await sb()
+        .from("movie_teams")
+        .select("id, name, email, assigned_movies, free_tickets_count, secret_key_hint, created_at")
+        .order("created_at", { ascending: false });
+      res.json((data || []).map(mapMovieTeam));
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error fetching teams", error: err.message });
+      res.status(500).json({ message: "Error fetching teams", error: err.message });
     }
   },
 };

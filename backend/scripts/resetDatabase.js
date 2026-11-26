@@ -1,61 +1,47 @@
 require("dotenv").config();
-const mongoose = require("mongoose");
-const User = require("../models/User");
-const MovieTeam = require("../models/MovieTeam");
-const Ticket = require("../models/Ticket");
-const Review = require("../models/Review");
-const PartnerRequest = require("../models/PartnerRequest");
-const Movie = require("../models/Movie");
+
+const { getSupabase, isSupabaseReady } = require("../config/supabase");
 
 async function resetDatabase() {
-  const targetUri = process.argv.includes("--local")
-    ? "mongodb://127.0.0.1:27017/cinereward"
-    : process.env.MONGODB_URI;
-
-  if (!targetUri) {
-    throw new Error("MONGODB_URI is not configured in backend/.env");
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[DB Reset] SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in backend/.env");
+    process.exit(1);
   }
 
-  console.log("[DB Reset] Connecting to database...");
-  await mongoose.connect(targetUri, { serverSelectionTimeoutMS: 8000 });
+  const db = getSupabase();
+  console.log("[DB Reset] Connecting to Supabase Postgres...");
 
-  const [usersRes, teamsRes, ticketsRes, reviewsRes, partnersRes, moviesRes] =
-    await Promise.all([
-      User.deleteMany({}),
-      MovieTeam.deleteMany({}),
-      Ticket.deleteMany({}),
-      Review.deleteMany({}),
-      PartnerRequest.deleteMany({}),
-      Movie.deleteMany({}),
-    ]);
+  // Verify connection
+  const { error: pingErr } = await db.from("users").select("id", { count: "exact", head: true });
+  if (pingErr) {
+    if (pingErr.code === "42P01" || pingErr.code === "PGRST205") {
+      console.error("[DB Reset] Tables not found. Run backend/supabase/schema.sql in Supabase SQL Editor first.");
+    } else {
+      console.error("[DB Reset] Connection failed:", pingErr.message);
+    }
+    process.exit(1);
+  }
 
-  await Promise.all([
-    User.syncIndexes(),
-    MovieTeam.syncIndexes(),
-    Ticket.syncIndexes(),
-    Review.syncIndexes(),
-    PartnerRequest.syncIndexes(),
-  ]);
+  console.log("[DB Reset] Connected! Clearing all tables...");
 
-  console.log("[DB Reset] All collections cleared cleanly:", {
-    usersRemoved: usersRes.deletedCount,
-    movieTeamsRemoved: teamsRes.deletedCount,
-    ticketsRemoved: ticketsRes.deletedCount,
-    reviewsRemoved: reviewsRes.deletedCount,
-    partnerRequestsRemoved: partnersRes.deletedCount,
-    moviesRemoved: moviesRes.deletedCount,
-  });
-  console.log(
-    "[Auth Setup] Ready with Argon2d hashing, 8-digit email OTP reset, and 3-role unified login."
-  );
+  const tables = ["tickets", "reviews", "partner_requests", "movies", "movie_teams", "users"];
+  const results = {};
 
-  await mongoose.disconnect();
+  for (const table of tables) {
+    const { error, count } = await db.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) {
+      console.error(`[DB Reset] Failed to clear ${table}:`, error.message);
+    } else {
+      results[table] = "cleared";
+    }
+  }
+
+  console.log("[DB Reset] All tables cleared:", results);
+  console.log("[Auth Setup] Ready with Argon2d hashing, 8-digit email OTP reset, and 3-role unified login.");
+  process.exit(0);
 }
 
-resetDatabase()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("[DB Reset] Failed:", err.message);
-    process.exit(1);
-  });
-
+resetDatabase().catch((err) => {
+  console.error("[DB Reset] Failed:", err.message);
+  process.exit(1);
+});

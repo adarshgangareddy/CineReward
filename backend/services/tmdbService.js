@@ -1,7 +1,7 @@
 require("dotenv").config();
 const axios = require("axios");
-const mongoose = require("mongoose");
-const Movie = require("../models/Movie");
+const { getSupabase, isSupabaseReady } = require("../config/supabase");
+const { mapMovie } = require("../utils/dbMappers");
 const {
   formatTmdbFinancials,
   formatCurrencyCompact,
@@ -586,10 +586,10 @@ function normalizeCustomMovieDoc(doc) {
 async function getCustomMoviesNormalized() {
   const cached = getCachedData("custom:movies:list", 60 * 1000);
   if (cached) return cached;
-  if (mongoose.connection.readyState !== 1) return [];
+  if (!isSupabaseReady()) return [];
   try {
-    const docs = await Movie.find({ isPublished: true }).sort({ createdAt: -1 }).lean();
-    const list = docs.map(normalizeCustomMovieDoc);
+    const { data: docs } = await getSupabase().from("movies").select("*").eq("is_published", true).order("created_at", { ascending: false });
+    const list = (docs || []).map((d) => normalizeCustomMovieDoc(mapMovie(d)));
     setCachedData("custom:movies:list", list);
     return list;
   } catch {
@@ -1187,10 +1187,10 @@ const tmdbService = {
     const idStr = String(rawParamId);
 
     // 0. Custom Admin Movie
-    if (idStr.startsWith("cr-") && mongoose.connection.readyState === 1) {
-      const customDoc = await Movie.findOne({ customId: idStr }).lean();
+    if (idStr.startsWith("cr-") && isSupabaseReady()) {
+      const { data: customDoc } = await getSupabase().from("movies").select("*").eq("custom_id", idStr).single();
       if (customDoc) {
-        const customItem = normalizeCustomMovieDoc(customDoc);
+        const customItem = normalizeCustomMovieDoc(mapMovie(customDoc));
         const similarList = (await tmdbService.getPopular(1)).slice(0, 6);
         return {
           ...customItem,
@@ -1447,9 +1447,9 @@ const tmdbService = {
 
   getTheatres: async (movieId, city = "Bengaluru") => {
     let customMovie = null;
-    if (String(movieId).startsWith("cr-") && mongoose.connection.readyState === 1) {
-      const doc = await Movie.findOne({ customId: String(movieId) }).lean();
-      if (doc) customMovie = normalizeCustomMovieDoc(doc);
+    if (String(movieId).startsWith("cr-") && isSupabaseReady()) {
+      const { data: doc } = await getSupabase().from("movies").select("*").eq("custom_id", String(movieId)).single();
+      if (doc) customMovie = normalizeCustomMovieDoc(mapMovie(doc));
     }
     return buildTheatresForMovie(movieId, city, customMovie);
   },

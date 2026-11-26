@@ -1,7 +1,7 @@
-const Ticket = require("../models/Ticket");
-const User = require("../models/User");
+const { getSupabase, isSupabaseReady } = require("../config/supabase");
+const { mapTicket, mapUser, toTicketRow } = require("../utils/dbMappers");
 const emailService = require("../services/emailService");
-const { sendPushNotification, sendEmail } = require("../config/notifications");
+const { sendPushNotification } = require("../config/notifications");
 const razorpay = require("../config/razorpay");
 const crypto = require("crypto");
 
@@ -24,29 +24,29 @@ const ticketController = {
         convenienceFee,
         paymentMethod,
         useCoins,
+        razorpayPaymentId,
+        razorpayOrderId,
       } = req.body;
 
-      const userDoc = await User.findById(userId);
-      if (!userDoc) return res.status(404).json({ message: "User not found" });
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
+      const db = getSupabase();
 
-      const seatCount = String(seat || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean).length;
+      const { data: userRow } = await db.from("users").select("*").eq("id", userId).single();
+      if (!userRow) return res.status(404).json({ message: "User not found" });
+      const userDoc = mapUser(userRow);
+
+      const seatCount = String(seat || "").split(",").map((s) => s.trim()).filter(Boolean).length;
       if (seatCount === 0) {
         return res.status(400).json({ message: "At least one seat is required" });
       }
 
       const coinDiscount = Number(useCoins) > 0 ? Number(useCoins) : 0;
       if (coinDiscount > 0 && userDoc.coins < coinDiscount) {
-        return res
-          .status(400)
-          .json({ message: "Insufficient coins for this discount" });
+        return res.status(400).json({ message: "Insufficient coins for this discount" });
       }
 
       const timeMatch = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      let startHour = 0;
-      let startMinute = 0;
+      let startHour = 0, startMinute = 0;
       if (timeMatch) {
         startHour = parseInt(timeMatch[1], 10);
         startMinute = parseInt(timeMatch[2], 10);
@@ -54,15 +54,15 @@ const ticketController = {
         if (ampm === "PM" && startHour < 12) startHour += 12;
         if (ampm === "AM" && startHour === 12) startHour = 0;
       } else {
-        const startTimeParts = time.split(":");
-        startHour = parseInt(startTimeParts[0], 10) || 0;
-        startMinute = parseInt(startTimeParts[1], 10) || 0;
+        const parts = time.split(":");
+        startHour = parseInt(parts[0], 10) || 0;
+        startMinute = parseInt(parts[1], 10) || 0;
       }
 
       const showtimeEnd = new Date(date);
       showtimeEnd.setHours(startHour + 3, startMinute, 0, 0);
 
-      const ticket = new Ticket({
+      const ticketRow = toTicketRow({
         userId,
         movieId,
         movieTitle,
@@ -72,51 +72,28 @@ const ticketController = {
         seatNumber: seat,
         date,
         time,
-        showtimeEnd,
+        showtimeEnd: showtimeEnd.toISOString(),
         price,
         snacksTotal: Number(snacksTotal) || 0,
         snacksSummary: snacksSummary || "",
         convenienceFee: Number(convenienceFee) || 0,
-        paymentMethod: paymentMethod || "Online Payment",
+        paymentMethod: paymentMethod || "Razorpay",
+        razorpayPaymentId: razorpayPaymentId || undefined,
+        razorpayOrderId: razorpayOrderId || undefined,
       });
 
-      await ticket.save();
+      const { data: createdTicket, error: ticketErr } = await db.from("tickets").insert(ticketRow).select("*").single();
+      if (ticketErr) throw ticketErr;
+      const ticket = mapTicket(createdTicket);
 
       const coinsEarned = Math.max(25, seatCount * 25);
       const netCoinDelta = coinsEarned - coinDiscount;
 
-      const user = await User.findByIdAndUpdate(
-        userId,
-        {
-          $push: { bookedTickets: ticket._id },
-          $inc: { coins: netCoinDelta },
-        },
-        { new: true }
-      );
-
-      let pushSent = false;
-      if (user.fcmTokens && user.fcmTokens.length > 0) {
-        try {
-          const title = "CineReward Ticket Confirmed!";
-          const message = `${movieTitle} • ${theatre} • ${date} at ${time} • Seats: ${seat}`;
-          pushSent = await sendPushNotification(user.fcmTokens, title, message, {
-            type: "ticket-booked",
-            ticketId: ticket._id,
-            movieTitle,
-            theatre,
-            seat,
-            date,
-            time,
-            url: "/dashboard",
-          });
-        } catch (pushErr) {
-          console.error("[Push] Failed to trigger notification:", pushErr);
-        }
-      }
+      await db.from("users").update({ coins: (userDoc.coins || 0) + netCoinDelta }).eq("id", userId);
 
       let emailSent = false;
-      if (user.email) {
-        emailSent = await emailService.sendTicketConfirmation(user.email, {
+      if (userDoc.email) {
+        emailSent = await emailService.sendTicketConfirmation(userDoc.email, {
           movieTitle,
           theatre,
           seat,
@@ -128,13 +105,7 @@ const ticketController = {
         });
       }
 
-      res.status(201).json({
-        ...ticket.toObject(),
-        ticket,
-        coinsEarned,
-        emailSent,
-        pushSent,
-      });
+      res.status(201).json({ ...ticket, ticket, coinsEarned, emailSent, pushSent: false });
     } catch (err) {
       res.status(500).json({ message: "Booking failed", error: err.message });
     }
@@ -142,14 +113,15 @@ const ticketController = {
 
   getUserTickets: async (req, res) => {
     try {
-      const tickets = await Ticket.find({ userId: req.params.userId }).sort({
-        createdAt: -1,
-      });
-      res.json(tickets);
+      if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
+      const { data } = await getSupabase()
+        .from("tickets")
+        .select("*")
+        .eq("user_id", req.params.userId)
+        .order("created_at", { ascending: false });
+      res.json((data || []).map(mapTicket));
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Error fetching tickets", error: err.message });
+      res.status(500).json({ message: "Error fetching tickets", error: err.message });
     }
   },
 
@@ -159,19 +131,14 @@ const ticketController = {
       const numericAmount = Number(amount);
 
       if (!razorpay.keyId || !process.env.RAZORPAY_KEY_SECRET) {
-        return res.status(503).json({
-          message: "Online payments are not configured on the server",
-        });
+        return res.status(503).json({ message: "Online payments are not configured on the server" });
       }
-
       if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-        return res
-          .status(400)
-          .json({ message: "A valid payment amount is required" });
+        return res.status(400).json({ message: "A valid payment amount is required" });
       }
 
       const options = {
-        amount: Math.round(numericAmount * 100), // Amount in paisa
+        amount: Math.round(numericAmount * 100),
         currency,
         receipt: receipt || `receipt_${Date.now()}`,
       };
@@ -183,19 +150,14 @@ const ticketController = {
       res.status(500).json({
         message: "Order creation failed",
         error: err.message,
-        details:
-          err.description ||
-          err.error?.description ||
-          "No specific description",
+        details: err.description || err.error?.description || "No specific description",
       });
     }
   },
 
   verifyPayment: async (req, res) => {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-        req.body;
-
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
       const body = razorpay_order_id + "|" + razorpay_payment_id;
       const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
@@ -203,19 +165,12 @@ const ticketController = {
         .digest("hex");
 
       if (expectedSignature === razorpay_signature) {
-        res.json({
-          status: "success",
-          message: "Payment verified successfully",
-        });
+        res.json({ status: "success", message: "Payment verified successfully" });
       } else {
-        res
-          .status(400)
-          .json({ status: "failure", message: "Payment verification failed" });
+        res.status(400).json({ status: "failure", message: "Payment verification failed" });
       }
     } catch (err) {
-      res
-        .status(500)
-        .json({ message: "Verification error", error: err.message });
+      res.status(500).json({ message: "Verification error", error: err.message });
     }
   },
 };

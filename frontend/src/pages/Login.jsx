@@ -2,12 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
 import { Mail, Lock, LogIn, Eye, EyeOff, Phone, X } from "lucide-react";
-import {
-  TwitterAuthProvider,
-  GithubAuthProvider,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth } from "../firebase";
+import { supabase } from "../lib/supabase";
 import BrandLogo from "../components/BrandLogo";
 import {
   getActiveSession,
@@ -18,7 +13,7 @@ import {
 
 const OAUTH_ERRORS = {
   db_unavailable:
-    "Sign-in requires MongoDB to be connected. Check MONGODB_URI in backend/.env and restart the backend.",
+    "Sign-in requires Supabase to be connected. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend/.env and restart the backend.",
   google_not_configured:
     "Google OAuth credentials are not configured on the backend yet.",
   oauth_failed: "Social sign-in could not be completed. Please try again.",
@@ -46,6 +41,41 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Handle Supabase OAuth redirect with #access_token fragment
+  useEffect(() => {
+    if (!supabase) return;
+    const handleSupabaseSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        try {
+          const res = await axios.post("/api/auth/supabase", { accessToken: session.access_token });
+          await supabase.auth.signOut();
+          if (res.data?.user && res.data?.token) {
+            finishAuthSuccess(res.data.user, res.data.token);
+          }
+        } catch (err) {
+          setError(err.response?.data?.message || "Social sign-in verification failed.");
+        }
+      }
+    };
+    handleSupabaseSession();
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.access_token) {
+        try {
+          const res = await axios.post("/api/auth/supabase", { accessToken: session.access_token });
+          await supabase.auth.signOut();
+          if (res.data?.user && res.data?.token) {
+            finishAuthSuccess(res.data.user, res.data.token);
+          }
+        } catch (err) {
+          setError(err.response?.data?.message || "Social sign-in verification failed.");
+        }
+      }
+    });
+    return () => listener?.subscription?.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -110,40 +140,28 @@ const Login = () => {
 
   const handleGoogleLogin = () => {
     setError("");
-    const apiBaseURL = getApiBaseURL();
-    window.location.href = `${apiBaseURL}/api/auth/google?origin=${encodeURIComponent(
-      window.location.origin
-    )}`;
-  };
-
-  const handleFirebaseSocial = async (providerName) => {
-    setError("");
-    if (!auth) {
-      setError("Firebase authentication is not configured in frontend/.env.");
+    if (supabase) {
+      supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/login" },
+      });
       return;
     }
-    setLoading(true);
-    try {
-      const provider =
-        providerName === "x"
-          ? new TwitterAuthProvider()
-          : new GithubAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-      const res = await axios.post("/api/auth/firebase", { idToken });
-      finishAuthSuccess(res.data.user, res.data.token);
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        (err.code === "auth/operation-not-allowed"
-          ? `${providerName.toUpperCase()} sign-in needs to be enabled in Firebase Authentication -> Sign-in method.`
-          : err.code === "auth/popup-closed-by-user"
-            ? "Sign-in popup was closed."
-            : err.message || "Social sign-in failed.");
-      setError(msg);
-    } finally {
-      setLoading(false);
+    // Fallback: Passport Google OAuth redirect
+    const apiBaseURL = getApiBaseURL();
+    window.location.href = `${apiBaseURL}/api/auth/google?origin=${encodeURIComponent(window.location.origin)}`;
+  };
+
+  const handleSocialOAuth = async (provider) => {
+    setError("");
+    if (supabase) {
+      await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: window.location.origin + "/login" },
+      });
+      return;
     }
+    setError(`${provider.toUpperCase()} sign-in requires Supabase to be configured (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY).`);
   };
 
   const handlePhoneContinue = async (e) => {
@@ -307,7 +325,7 @@ const Login = () => {
           {/* X Icon */}
           <button
             type="button"
-            onClick={() => handleFirebaseSocial("x")}
+            onClick={() => handleSocialOAuth("twitter")}
             title="Continue with X"
             aria-label="Continue with X"
             className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] text-white flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"
@@ -320,7 +338,7 @@ const Login = () => {
           {/* GitHub Icon */}
           <button
             type="button"
-            onClick={() => handleFirebaseSocial("github")}
+            onClick={() => handleSocialOAuth("github")}
             title="Continue with GitHub"
             aria-label="Continue with GitHub"
             className="w-12 h-12 rounded-2xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/[0.16] text-white flex items-center justify-center transition-all hover:-translate-y-0.5 shadow-lg"

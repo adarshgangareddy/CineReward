@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
-import { requestForToken, onMessageListener } from "./firebase";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import AmbientBackdrop from "./components/AmbientBackdrop";
@@ -67,37 +66,13 @@ function App() {
     };
     syncSession();
 
-    const setupNotifications = async () => {
-      try {
-        const session = getActiveSession();
-        if (!session || session.role !== "user" || !session.data?.id) return;
-
-        const token = await requestForToken();
-        if (!token) return;
-
-        await axios.post("/api/users/fcm-token", {
-          userId: session.data.id,
-          fcmToken: token,
-        });
-      } catch (error) {
-        console.error("[FCM Setup Error]", error);
-      }
+    // Listen for custom in-app notification events (e.g. triggered after ticket booking)
+    const handleCustomNotify = (e) => {
+      const { title, body, data } = e.detail || {};
+      if (title || body) setActiveNotification({ title, body, data });
     };
-
-    setupNotifications();
-
-    const unsubscribe = onMessageListener((payload) => {
-      if (!payload) return;
-      if (payload.notification || payload.data) {
-        setActiveNotification({
-          title: payload.notification?.title || payload.data?.title,
-          body: payload.notification?.body || payload.data?.body,
-          data: payload.data,
-        });
-      }
-    });
-
-    return unsubscribe;
+    window.addEventListener("cinereward:notify", handleCustomNotify);
+    return () => window.removeEventListener("cinereward:notify", handleCustomNotify);
   }, []);
 
   return (

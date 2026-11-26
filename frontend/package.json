@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@react-leaflet/core": "2.1.0",
+    "@supabase/supabase-js": "^2.119.2",
     "axios": "^1.6.7",
-    "firebase": "^12.10.0",
     "framer-motion": "^11.0.3",
     "leaflet": "1.9.4",
     "lucide-react": "^0.330.0",

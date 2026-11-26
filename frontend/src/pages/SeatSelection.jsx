@@ -200,7 +200,7 @@ const SeatSelection = () => {
   const [loadingTheatres, setLoadingTheatres] = useState(false);
 
   // BookMyShow Flow States
-  const [step, setStep] = useState("theatres"); // "theatres" | "seats" | "snacks" | "payment" | "confirmed"
+  const [step, setStep] = useState("theatres"); // "theatres" | "seats" | "snacks" | "confirmed"
   const [showFormatModal, setShowFormatModal] = useState(true);
   const [selectedLangFormat, setSelectedLangFormat] = useState({
     language: "English",
@@ -710,8 +710,7 @@ const SeatSelection = () => {
                   type="button"
                   onClick={() => {
                     setError("");
-                    if (step === "payment") setStep("snacks");
-                    else if (step === "snacks") setStep("seats");
+                    if (step === "snacks") setStep("seats");
                     else setStep("theatres");
                   }}
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.07] hover:bg-white/[0.14] border border-white/15 text-xs font-semibold text-white transition-all"

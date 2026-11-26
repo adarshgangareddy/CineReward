@@ -228,3 +228,4 @@ const WhiteTicketCard = ({
 };
 
 export default WhiteTicketCard;
+
