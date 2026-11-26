@@ -216,9 +216,8 @@ const Login = () => {
 
     const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
     const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-    let resolvedProvider = requestedProvider;
-
     try {
+      let resolvedProvider = requestedProvider === "twitter" ? "x" : requestedProvider;
       const settingsRes = await fetch(`${supabaseUrl}/auth/v1/settings`, {
         headers: { apikey: supabaseAnon },
       });
@@ -226,15 +225,18 @@ const Login = () => {
         const settings = await settingsRes.json();
         const ext = settings?.external || {};
         if (requestedProvider === "twitter") {
-          if (ext.x) resolvedProvider = "x";
-          else if (ext.twitter) resolvedProvider = "twitter";
-          else {
+          if (ext.x === true) {
+            resolvedProvider = "x";
+          } else if (ext.twitter === true) {
+            resolvedProvider = "twitter";
+          } else if (ext.x === false && ext.twitter === false) {
             setError(
-              "X (Twitter) sign-in is not enabled in Supabase Auth Providers yet. Use Google or Email sign-in, or enable X / Twitter in Supabase → Authentication → Sign In / Providers."
+              "X (Twitter) sign-in is disabled in Supabase Auth Providers. Toggle it ON and click Save in Supabase → Authentication → Sign In / Providers."
             );
             return;
           }
-        } else if (!ext[requestedProvider]) {
+          // If ext.x is omitted from /settings while X (OAuth 2.0) is enabled, proceed with "x"
+        } else if (ext[requestedProvider] === false) {
           setError(
             `${requestedProvider.charAt(0).toUpperCase() + requestedProvider.slice(1)} sign-in is not enabled in Supabase Auth Providers yet. Enable it in Supabase → Authentication → Sign In / Providers.`
           );
