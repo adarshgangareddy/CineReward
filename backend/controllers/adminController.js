@@ -1,11 +1,31 @@
 const { getSupabase, isSupabaseReady } = require("../config/supabase");
 const { mapUser, mapMovieTeam, mapTicket, mapReview, toMovieTeamRow } = require("../utils/dbMappers");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const {
   hashSecret,
   digestSecret,
   formatKeyHint,
 } = require("../utils/passwordHash");
+
+const generateUnique16DigitKey = () => {
+  // First digit 1-9, remaining 15 digits 0-9 -> guaranteed 16-digit numeric secret key
+  let digits = String(crypto.randomInt(1, 10));
+  for (let i = 0; i < 15; i += 1) {
+    digits += String(crypto.randomInt(0, 10));
+  }
+  return digits;
+};
+
+const makeTeamEmailFromName = (name = "team") => {
+  const slug = String(name || "team")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 28) || "movie";
+  const suffix = crypto.randomInt(100, 999);
+  return `${slug}-${suffix}@cinereward.com`;
+};
 
 const sb = () => getSupabase();
 
@@ -101,37 +121,45 @@ const adminController = {
     try {
       if (!isSupabaseReady()) return res.status(503).json({ message: "Database disconnected" });
       const { name, email, password, secretKey, assignedMovies } = req.body;
-      const normalizedEmail = email?.trim().toLowerCase();
-      const cleanKey = secretKey?.trim();
+      if (!name?.trim()) {
+        return res.status(400).json({ message: "Team name is required" });
+      }
+      const normalizedEmail = (email?.trim() || makeTeamEmailFromName(name)).toLowerCase();
+      let cleanKey = secretKey?.trim() || generateUnique16DigitKey();
       const cleanPass = password?.trim();
 
-      if (!name?.trim() || !normalizedEmail || (!cleanKey && !cleanPass)) {
-        return res.status(400).json({ message: "Name, email, and a Secret Key (or password) are required" });
+      const db = sb();
+      let keyDigest = digestSecret(cleanKey);
+
+      // Ensure unique secret key if auto-generated
+      if (!secretKey?.trim()) {
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const { data: clash } = await db
+            .from("movie_teams")
+            .select("id")
+            .eq("secret_key_digest", keyDigest)
+            .limit(1);
+          if (!clash || clash.length === 0) break;
+          cleanKey = generateUnique16DigitKey();
+          keyDigest = digestSecret(cleanKey);
+        }
       }
 
-      const keyDigest = cleanKey ? digestSecret(cleanKey) : undefined;
-      const db = sb();
-
       // Check duplicate
-      const orFilters = [`email.eq.${normalizedEmail}`];
-      if (keyDigest) orFilters.push(`secret_key_digest.eq.${keyDigest}`);
+      const orFilters = [`email.eq.${normalizedEmail}`, `secret_key_digest.eq.${keyDigest}`];
       const { data: existing } = await db.from("movie_teams").select("id").or(orFilters.join(",")).limit(1);
       if (existing && existing.length > 0) {
-        return res.status(409).json({ message: "Team email or secret key already exists" });
+        return res.status(409).json({ message: "Team email or 16-digit secret key already exists" });
       }
 
       const row = toMovieTeamRow({
         name: name.trim(),
         email: normalizedEmail,
         ...(cleanPass ? { password: await hashSecret(cleanPass) } : {}),
-        ...(cleanKey
-          ? {
-              secretKeyDigest: keyDigest,
-              secretKeyHash: await hashSecret(cleanKey),
-              secretKeyHint: formatKeyHint(cleanKey),
-            }
-          : {}),
-        assignedMovies: Array.isArray(assignedMovies) ? assignedMovies : [],
+        secretKeyDigest: keyDigest,
+        secretKeyHash: await hashSecret(cleanKey),
+        secretKeyHint: formatKeyHint(cleanKey),
+        assignedMovies: Array.isArray(assignedMovies) ? assignedMovies.map(String) : [],
       });
 
       const { data: created, error } = await db.from("movie_teams").insert(row).select("*").single();
@@ -144,8 +172,12 @@ const adminController = {
       delete safeTeam.secretKeyDigest;
 
       res.status(201).json({
-        message: "Movie Team created successfully (credentials hashed with Argon2d)",
+        message: "Movie Team assigned successfully (Argon2d hashed)",
         team: safeTeam,
+        generatedCredentials: {
+          email: normalizedEmail,
+          secretKey: cleanKey,
+        },
       });
     } catch (err) {
       res.status(500).json({ message: "Error creating team", error: err.message });

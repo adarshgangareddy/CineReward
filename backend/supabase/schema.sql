@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users (lower(email));
 CREATE INDEX IF NOT EXISTS idx_users_username ON public.users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users (phone);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users (role);
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON public.users (google_id);
 CREATE INDEX IF NOT EXISTS idx_users_supabase_uid ON public.users (supabase_uid);
 
@@ -50,6 +51,8 @@ CREATE TABLE IF NOT EXISTS public.movie_teams (
   secret_key_hint text,
   secret_key text,
   assigned_movies jsonb NOT NULL DEFAULT '[]'::jsonb,
+  movie_titles jsonb NOT NULL DEFAULT '[]'::jsonb,
+  assigned_by text,
   free_tickets_count integer NOT NULL DEFAULT 0,
   reset_code_hash text,
   reset_code_expires timestamptz,
@@ -57,8 +60,13 @@ CREATE TABLE IF NOT EXISTS public.movie_teams (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Idempotent column upgrades for existing databases
+ALTER TABLE public.movie_teams ADD COLUMN IF NOT EXISTS movie_titles jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.movie_teams ADD COLUMN IF NOT EXISTS assigned_by text;
+
 CREATE INDEX IF NOT EXISTS idx_movie_teams_email ON public.movie_teams (lower(email));
 CREATE INDEX IF NOT EXISTS idx_movie_teams_digest ON public.movie_teams (secret_key_digest);
+CREATE INDEX IF NOT EXISTS idx_movie_teams_movies_gin ON public.movie_teams USING gin (assigned_movies);
 
 -- ----------------------------------------------------------------------------
 -- 3. CUSTOM / ADMIN MOVIES TABLE (Unified CineReward Template)

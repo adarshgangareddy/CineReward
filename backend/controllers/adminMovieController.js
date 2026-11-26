@@ -17,10 +17,9 @@ function extractYoutubeKey(urlOrKey = "") {
 }
 
 function generateTeamSecretKey() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "CR-";
-  for (let i = 0; i < 8; i += 1) {
-    out += chars[crypto.randomInt(0, chars.length)];
+  let out = String(crypto.randomInt(1, 10));
+  for (let i = 0; i < 15; i += 1) {
+    out += String(crypto.randomInt(0, 10));
   }
   return out;
 }
