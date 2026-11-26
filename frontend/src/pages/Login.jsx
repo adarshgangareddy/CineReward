@@ -50,6 +50,9 @@ const consumePostLoginRedirect = (role) => {
 };
 
 const Login = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [identifier, setIdentifier] = useState("");
   const [credential, setCredential] = useState("");
   const [showCredential, setShowCredential] = useState(false);
@@ -61,8 +64,6 @@ const Login = () => {
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState(() => location.state?.message || "");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   // Persist return path across external OAuth redirects (Google / X / GitHub)
   useEffect(() => {
